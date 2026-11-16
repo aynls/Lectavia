@@ -1,0 +1,6 @@
+# Build output and generated files
+/dist/
+/dist-ssr/
+/src-tauri/target/
+/src-tauri/gen/
+/pnpm-lock.yaml
