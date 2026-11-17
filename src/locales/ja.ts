@@ -147,12 +147,7 @@ export default {
   "model.effort": "推論の強度",
   "model.defaultEffort": "プロバイダーの既定値",
   "model.namedDefaultEffort": "プロバイダーの既定値（{{effort}}）",
-  "model.manualEffort": "手入力",
-  "model.customEffort": "推論の強度を指定",
-  "model.effortPlaceholder": "空欄の場合はプロバイダーが決定",
   "model.noEfforts": "プロバイダーはこのモデルの推論レベルを公開していません。",
-  "model.detectEfforts":
-    "モデル一覧を取得すると、対応する推論レベルが表示されます。",
   "model.providerCatalog": "モデル一覧の取得",
   "prompt.intro":
     "動画の文字起こしを、流れのある読みやすい原稿に整えてください。",

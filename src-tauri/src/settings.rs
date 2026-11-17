@@ -11,6 +11,10 @@ struct ModelConnection {
     model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_efforts: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    default_effort: Option<String>,
 }
 
 #[derive(Deserialize, Serialize)]

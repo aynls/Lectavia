@@ -1,5 +1,6 @@
 import {
   useId,
+  useEffect,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
@@ -90,22 +91,21 @@ interface CatalogLookup {
 }
 
 function ReasoningField({
-  model,
+  efforts,
+  defaultEffort,
   effort,
   onChange,
 }: {
-  model?: CatalogModel;
+  efforts: string[];
+  defaultEffort?: string;
   effort: string;
   onChange: (effort: string) => void;
 }) {
   const { t } = useTranslation();
   const id = useId();
-  const [manual, setManual] = useState(false);
-  const efforts = model?.reasoningEfforts ?? [];
-  const useManualEffort =
-    manual || (effort !== "" && !efforts.includes(effort));
-  const defaultLabel = model?.defaultEffort
-    ? t("model.namedDefaultEffort", { effort: model.defaultEffort })
+  const selectedEffort = efforts.includes(effort) ? effort : "";
+  const defaultLabel = defaultEffort
+    ? t("model.namedDefaultEffort", { effort: defaultEffort })
     : t("model.defaultEffort");
 
   return (
@@ -113,52 +113,26 @@ function ReasoningField({
       <summary>
         <Icon name="down" />
         {t("model.effort")}
-        <small className="advanced-selection" title={effort}>
-          {effort || t("model.defaultEffort")}
+        <small className="advanced-selection" title={selectedEffort}>
+          {selectedEffort || t("model.defaultEffort")}
         </small>
       </summary>
       <div className="advanced-content">
-        {efforts.length > 0 && (
-          <>
-            <label htmlFor={id}>{t("model.effort")}</label>
-            <select
-              id={id}
-              name="reasoning-effort-choice"
-              value={useManualEffort ? "__manual__" : effort}
-              onChange={(event) => {
-                const value = event.target.value;
-                setManual(value === "__manual__");
-                if (value !== "__manual__") onChange(value);
-              }}
-            >
-              <option value="">{defaultLabel}</option>
-              {efforts.map((level) => (
-                <option key={level} value={level}>
-                  {level}
-                </option>
-              ))}
-              <option value="__manual__">{t("model.manualEffort")}</option>
-            </select>
-          </>
-        )}
-        {(efforts.length === 0 || useManualEffort) && (
-          <>
-            <label htmlFor={id + "-custom"}>{t("model.customEffort")}</label>
-            <input
-              id={id + "-custom"}
-              name="reasoning-effort"
-              value={effort}
-              placeholder={t("model.effortPlaceholder")}
-              aria-describedby={efforts.length === 0 ? id + "-hint" : undefined}
-              spellCheck={false}
-              onChange={(event) => onChange(event.target.value)}
-            />
-            {efforts.length === 0 && (
-              <p id={id + "-hint"} className="muted settings-hint">
-                {t(model ? "model.noEfforts" : "model.detectEfforts")}
-              </p>
-            )}
-          </>
+        <label htmlFor={id}>{t("model.effort")}</label>
+        <select
+          id={id}
+          value={selectedEffort}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          <option value="">{defaultLabel}</option>
+          {efforts.map((level) => (
+            <option key={level} value={level}>
+              {level}
+            </option>
+          ))}
+        </select>
+        {efforts.length === 0 && (
+          <p className="muted settings-hint">{t("model.noEfforts")}</p>
         )}
       </div>
     </details>
@@ -169,6 +143,7 @@ function ProviderFields({
   connection,
   errors,
   setConnection,
+  onLoadingChange,
   purpose,
 }: {
   connection: ModelConnection;
@@ -177,13 +152,22 @@ function ProviderFields({
     connection: ModelConnection,
     changedField?: ModelConnectionField,
   ) => void;
+  onLoadingChange: (purpose: ModelPurpose, loading: boolean) => void;
   purpose: ModelPurpose;
 }) {
   const { t } = useTranslation();
   const id = useId();
   const request = useRef(0);
+  const currentConnection = useRef(connection);
+  currentConnection.current = connection;
   const [lookup, setLookup] = useState<CatalogLookup>();
   const [manualModel, setManualModel] = useState(false);
+  useEffect(
+    () => () => {
+      request.current++;
+    },
+    [],
+  );
   const catalog =
     lookup?.baseUrl === connection.baseUrl &&
     lookup.apiKey === connection.apiKey
@@ -200,6 +184,7 @@ function ProviderFields({
       value.trim().replace(/\/+$/, "") !==
         connection.baseUrl.trim().replace(/\/+$/, "");
     request.current++;
+    onLoadingChange(purpose, false);
     setLookup(undefined);
     setConnection(
       {
@@ -208,20 +193,29 @@ function ProviderFields({
         reasoningEffort: providerChanged
           ? undefined
           : connection.reasoningEffort,
+        reasoningEfforts: providerChanged
+          ? undefined
+          : connection.reasoningEfforts,
+        defaultEffort: providerChanged ? undefined : connection.defaultEffort,
       },
       field,
     );
   }
 
   function editModel(model: string) {
+    const sameModel = model.trim() === connection.model.trim();
+    const metadata = models.find((entry) => entry.id === model.trim());
     setConnection(
       {
         ...connection,
         model,
-        reasoningEffort:
-          model.trim() === connection.model.trim()
-            ? connection.reasoningEffort
-            : undefined,
+        reasoningEffort: sameModel ? connection.reasoningEffort : undefined,
+        reasoningEfforts: sameModel
+          ? connection.reasoningEfforts
+          : metadata?.reasoningEfforts,
+        defaultEffort: sameModel
+          ? connection.defaultEffort
+          : metadata?.defaultEffort,
       },
       "model",
     );
@@ -231,19 +225,40 @@ function ProviderFields({
     const serial = ++request.current;
     const endpoint = { baseUrl: connection.baseUrl, apiKey: connection.apiKey };
     setLookup({ ...endpoint });
+    onLoadingChange(purpose, true);
     try {
       const models = await listModels(endpoint, purpose);
       if (serial === request.current) {
         setManualModel(false);
         setLookup({ ...endpoint, models });
+        const current = currentConnection.current;
+        const model = models.find((entry) => entry.id === current.model.trim());
+        const efforts = model?.reasoningEfforts ?? [];
+        setConnection({
+          ...current,
+          reasoningEfforts: model?.reasoningEfforts,
+          defaultEffort: model?.defaultEffort,
+          reasoningEffort: efforts.includes(current.reasoningEffort ?? "")
+            ? current.reasoningEffort
+            : undefined,
+        });
       }
     } catch (error) {
       if (serial === request.current) {
+        const current = currentConnection.current;
+        setConnection({
+          ...current,
+          reasoningEffort: undefined,
+          reasoningEfforts: undefined,
+          defaultEffort: undefined,
+        });
         setLookup({
           ...endpoint,
           error: redactMessage(errorMessage(error), [endpoint.apiKey]),
         });
       }
+    } finally {
+      if (serial === request.current) onLoadingChange(purpose, false);
     }
   }
 
@@ -350,7 +365,8 @@ function ProviderFields({
       {purpose === "llm" && connection.model.trim() && (
         <ReasoningField
           key={connection.model.trim()}
-          model={selected}
+          efforts={connection.reasoningEfforts ?? []}
+          defaultEffort={connection.defaultEffort}
           effort={connection.reasoningEffort ?? ""}
           onChange={(reasoningEffort) =>
             setConnection({ ...connection, reasoningEffort })
@@ -382,6 +398,13 @@ export function ModelSettings({
   const [focus, setFocus] = useState<ModelSettingsFocus>();
   const [saving, setSaving] = useState(false);
   const [saveAndRetry, setSaveAndRetry] = useState(false);
+  const [session, setSession] = useState(0);
+  const [loadingModels, setLoadingModels] = useState<
+    Record<ModelPurpose, boolean>
+  >({
+    asr: false,
+    llm: false,
+  });
 
   useLayoutEffect(() => {
     if (!focus || !modal.current?.open) return;
@@ -398,6 +421,8 @@ export function ModelSettings({
     if (!dialog || dialog.open) return;
 
     const errors = validateSettings(value);
+    setSession((current) => current + 1);
+    setLoadingModels({ asr: false, llm: false });
     setSaveAndRetry(Boolean(options.saveAndRetry));
     setDraft(value);
     setError(undefined);
@@ -435,7 +460,7 @@ export function ModelSettings({
 
   async function saveSettings(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (saving) return;
+    if (saving || loadingModels.asr || loadingModels.llm) return;
 
     const errors = validateSettings(draft);
     const invalidField = firstInvalidSetting(errors);
@@ -446,13 +471,17 @@ export function ModelSettings({
       return;
     }
 
-    const form = new FormData(event.currentTarget);
-    const effort =
-      form.get("reasoning-effort") ?? form.get("reasoning-effort-choice");
-    const reasoningEffort =
-      typeof effort === "string" ? effort.trim() || undefined : undefined;
-
-    const next = { ...draft, llm: { ...draft.llm, reasoningEffort } };
+    const next = {
+      ...draft,
+      llm: {
+        ...draft.llm,
+        reasoningEffort: draft.llm.reasoningEfforts?.includes(
+          draft.llm.reasoningEffort ?? "",
+        )
+          ? draft.llm.reasoningEffort
+          : undefined,
+      },
+    };
     setSaving(true);
     try {
       await onSave(next);
@@ -531,11 +560,17 @@ export function ModelSettings({
           <fieldset className="settings-body" disabled={saving}>
             {modelPurposes.map((purpose) => (
               <ProviderFields
-                key={purpose}
+                key={`${purpose}-${session}`}
                 connection={draft[purpose]}
                 errors={validation?.[purpose]}
                 setConnection={(connection, changedField) =>
                   updateDraft(purpose, connection, changedField)
+                }
+                onLoadingChange={(modelPurpose, loading) =>
+                  setLoadingModels((current) => ({
+                    ...current,
+                    [modelPurpose]: loading,
+                  }))
                 }
                 purpose={purpose}
               />
@@ -555,7 +590,11 @@ export function ModelSettings({
               >
                 {t("common.cancel")}
               </button>
-              <button type="submit" className="primary" disabled={saving}>
+              <button
+                type="submit"
+                className="primary"
+                disabled={saving || loadingModels.asr || loadingModels.llm}
+              >
                 {t(
                   saving
                     ? "model.saving"

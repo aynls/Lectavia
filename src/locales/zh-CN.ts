@@ -139,11 +139,7 @@ export default {
   "model.effort": "思考强度",
   "model.defaultEffort": "供应商默认",
   "model.namedDefaultEffort": "供应商默认（{{effort}}）",
-  "model.manualEffort": "手动填写",
-  "model.customEffort": "自定义思考强度",
-  "model.effortPlaceholder": "留空时由供应商决定",
   "model.noEfforts": "供应商未列出此模型的档位。",
-  "model.detectEfforts": "获取模型列表后可自动检测支持的档位。",
   "model.providerCatalog": "获取模型列表",
   "prompt.intro": "将视频的语音转写整理为连贯、可读的文稿。",
   "prompt.fidelity":

@@ -145,13 +145,8 @@ export default {
   "model.effort": "Reasoning effort",
   "model.defaultEffort": "Provider default",
   "model.namedDefaultEffort": "Provider default ({{effort}})",
-  "model.manualEffort": "Enter manually",
-  "model.customEffort": "Custom reasoning effort",
-  "model.effortPlaceholder": "Leave blank to use the provider default",
   "model.noEfforts":
     "The provider did not list reasoning levels for this model.",
-  "model.detectEfforts":
-    "Fetch the model list to see supported reasoning levels.",
   "model.providerCatalog": "Model list",
   "prompt.intro":
     "Organize the video transcript into a coherent, readable document.",

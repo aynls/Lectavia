@@ -15,6 +15,8 @@ interface ModelEndpoint {
 export interface ModelConnection extends ModelEndpoint {
   model: string;
   reasoningEffort?: string;
+  reasoningEfforts?: string[];
+  defaultEffort?: string;
 }
 
 export type ModelPurpose = "asr" | "llm";
@@ -283,8 +285,11 @@ export async function organizeTranscript(
   options: OrganizationOptions,
 ): Promise<string> {
   const profile = normalizeConnection(options.connection);
-  const reasoningEffort =
-    options.connection.reasoningEffort?.trim() || undefined;
+  const reasoningEffort = options.connection.reasoningEfforts?.includes(
+    options.connection.reasoningEffort ?? "",
+  )
+    ? options.connection.reasoningEffort
+    : undefined;
   const sections = splitTranscript(transcript);
   if (!sections.length) {
     throw message("error.emptyTranscript");
