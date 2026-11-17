@@ -93,28 +93,20 @@ Windows 上的默认产物路径为 `src-tauri/target/release/lectavia-cli.exe`�
 - `pnpm build` 检查 TypeScript 并构建前端，`pnpm tauri build` 构建桌面应用。
 - `cargo test --manifest-path src-tauri/Cargo.toml --locked` 运行 Rust 测试。
 
-### Windows x64 安装包
+### 平台安装包
 
-在 [MSYS2](https://www.msys2.org/) 的 UCRT64 终端安装构建工具。
-
-```bash
-pacman -S --needed make diffutils mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-nasm
-```
-
-若 MSYS2 装在 `C:\msys64` 以外，先在运行 `pnpm tauri build` 的 PowerShell 中将 `MSYS2_ROOT` 设为它的安装目录。首次构建会下载并校验 FFmpeg、LAME 源码，然后编译并打包。后续构建复用校验通过的产物。安装包内的 `media-tools/ffmpeg` 提供相应源码、构建脚本和 LGPL 许可文本。
-
-构建也会下载并校验固定版本的 yt-dlp、Python 嵌入包和 QuickJS-NG，再从 `media-tools/online` 一并打包。更新这些工具时，在 `scripts/prepare-online-media.ps1` 更新对应版本和 SHA-256，然后重新构建安装包。
-
-### Linux x64 和 Apple Silicon macOS 安装包
-
-Linux 构建在 Tauri 系统依赖之外需要 NASM 和 `xz-utils`。macOS 构建需要运行 macOS 26 或更高版本的 Apple Silicon Mac，以及 Xcode 命令行工具。构建时，同一个脚本使用 FFmpeg 和 LAME 源码为本机编译工具。`scripts/prepare-online-media.sh` 下载并校验 Python、yt-dlp 和 QuickJS-NG。更新 yt-dlp 或 QuickJS-NG 时，同步更新 Windows 和 Unix 脚本中的版本与校验值。
+打包时会下载并校验预编译的 FFmpeg、FFprobe、Python、yt-dlp 和 QuickJS-NG。Windows 使用系统自带的 `curl.exe` 和 `tar.exe`，Linux 需要 `curl` 和 `xz-utils`，macOS 构建需要运行 macOS 26 或更高版本的 Apple Silicon Mac，以及 Xcode 命令行工具。
 
 ```bash
+# Windows x64
+npm run app:build:setup
 # Linux x64
 pnpm tauri build --bundles deb,appimage
 # Apple Silicon macOS
 pnpm tauri build --bundles dmg
 ```
+
+FFmpeg 构建固定在 `scripts/prepare-ffmpeg.mjs`。Windows 和 Linux 使用 [FFmpeg-Builds 的 LGPL 构建](https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/tag/autobuild-2026-10-31-12-59)，macOS 使用 [dfloresc 的 Apple Silicon LGPL 构建](https://github.com/dfloresc/ffmpeg-macos-builds/releases/tag/v9.0.1-1)。安装包内的 `media-tools/ffmpeg/dist` 提供许可文本以及对应的源代码和构建信息链接。更新在线媒体工具时，在 `scripts/prepare-online-media.ps1` 和 `scripts/prepare-online-media.sh` 中更新相关版本和校验值。
 
 ### GitHub 发布
 

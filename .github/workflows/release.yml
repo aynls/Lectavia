@@ -67,16 +67,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential nasm libwebkit2gtk-4.1-dev libappindicator3-dev \
+          sudo apt-get install -y build-essential xz-utils libwebkit2gtk-4.1-dev libappindicator3-dev \
             librsvg2-dev libdbus-1-dev libssl-dev patchelf xdg-utils libfuse2
-
-      - uses: msys2/setup-msys2@v2
-        if: runner.os == 'Windows'
-        id: msys2
-        with:
-          msystem: UCRT64
-          update: true
-          install: curl diffutils make mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-nasm
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -126,8 +118,6 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Build installers
-        env:
-          MSYS2_ROOT: ${{ steps.msys2.outputs.msys2-location }}
         run: pnpm tauri build --ci --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
 
       - uses: actions/upload-artifact@v7
