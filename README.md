@@ -21,7 +21,7 @@ pnpm tauri dev
 
 ## 生成学习资料
 
-1. 打开「模型设置」，分别填写语音转写与资料整理的 API Base URL 和 API Key。可以获取供应商的模型列表后选择，也可以直接填写模型 ID。语音转写预设为 OpenRouter 和 `openai/whisper-large-v3-turbo`。
+1. 打开「模型设置」，分别填写语音转写与资料整理的 API Base URL 和 API Key。可以获取供应商的模型列表后选择，也可以直接填写模型 ID。资料整理会自动显示模型目录公布的思考强度，也可以手动填写。留空时使用供应商默认设置。语音转写预设为 OpenRouter 和 `openai/whisper-large-v3-turbo`。
 2. 粘贴视频链接或选择本地视频。Bilibili 多 P 视频可勾选要生成的分 P。
 3. 选择输出目录和文件格式，可选一个 UTF-8 Markdown 文件补充整理要求。点击「生成学习资料」后，在任务队列查看进度和成品位置。
 

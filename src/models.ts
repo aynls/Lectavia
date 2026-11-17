@@ -7,6 +7,7 @@ interface ModelEndpoint {
 
 export interface ModelConnection extends ModelEndpoint {
   model: string;
+  reasoningEffort?: string;
 }
 
 export type ModelPurpose = "asr" | "llm";
@@ -14,6 +15,14 @@ export type ModelPurpose = "asr" | "llm";
 export interface CatalogModel {
   id: string;
   name: string;
+  reasoningEfforts?: string[];
+  defaultEffort?: string;
+}
+
+interface CatalogEntry {
+  id?: unknown;
+  name?: unknown;
+  reasoning?: { supported_efforts?: unknown; default_effort?: unknown };
 }
 
 interface ChatMessage {
@@ -98,9 +107,10 @@ export async function listModels(
   const host = new URL(profile.baseUrl).hostname;
   const transcription =
     purpose === "asr" && ["openrouter.ai", "eu.openrouter.ai"].includes(host);
-  const result = await invoke<{
-    data?: Array<{ id?: unknown; name?: unknown }>;
-  }>("list_models", { ...profile, transcription });
+  const result = await invoke<{ data?: CatalogEntry[] }>("list_models", {
+    ...profile,
+    transcription,
+  });
 
   if (!Array.isArray(result?.data)) {
     throw new Error("供应商返回的模型列表格式无效。");
@@ -111,7 +121,27 @@ export async function listModels(
     const id = typeof model?.id === "string" ? model.id.trim() : "";
     if (id) {
       const name = typeof model.name === "string" ? model.name.trim() : "";
-      models.set(id, { id, name: name || id });
+      const entry: CatalogModel = { id, name: name || id };
+      const efforts = model.reasoning?.supported_efforts;
+      if (purpose === "llm" && Array.isArray(efforts)) {
+        entry.reasoningEfforts = [
+          ...new Set(
+            efforts.flatMap((effort: unknown) =>
+              typeof effort === "string" && effort.trim()
+                ? [effort.trim()]
+                : [],
+            ),
+          ),
+        ];
+        const fallback = model.reasoning?.default_effort;
+        if (
+          typeof fallback === "string" &&
+          entry.reasoningEfforts.includes(fallback)
+        ) {
+          entry.defaultEffort = fallback;
+        }
+      }
+      models.set(id, entry);
     }
   }
   return [...models.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -221,6 +251,8 @@ export async function organizeStudyMaterial(
   options: OrganizationOptions,
 ): Promise<string> {
   const profile = normalizeConnection(options.connection);
+  const reasoningEffort =
+    options.connection.reasoningEffort?.trim() || undefined;
   const sections = splitTranscript(transcript);
   if (!sections.length) {
     throw new Error("文字稿为空，无法整理学习资料。");
@@ -245,6 +277,7 @@ export async function organizeStudyMaterial(
     const result = await invoke<ChatCompletion>("complete_text", {
       ...profile,
       messages,
+      reasoningEffort,
     });
     const choice = result?.choices?.[0];
 

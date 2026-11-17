@@ -228,6 +228,8 @@ pub struct ChatMessage {
 struct ChatRequest<'a> {
     model: &'a str,
     messages: Vec<ChatMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<&'a str>,
 }
 
 #[tauri::command]
@@ -236,10 +238,15 @@ pub async fn complete_text(
     api_key: String,
     model: String,
     messages: Vec<ChatMessage>,
+    reasoning_effort: Option<String>,
 ) -> Result<Value, String> {
     let url = endpoint(&base_url, "chat/completions")?;
     let (api_key, model) = credentials(&api_key, &model)?;
-    let body = ChatRequest { model, messages };
+    let body = ChatRequest {
+        model,
+        messages,
+        reasoning_effort: reasoning_effort.as_deref(),
+    };
     send_json(
         client()?
             .post(url)

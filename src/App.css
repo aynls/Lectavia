@@ -362,6 +362,10 @@ legend {
   margin-top: 0.65rem;
 }
 
+.settings-hint {
+  margin-top: 0.25rem;
+}
+
 .settings-actions {
   justify-content: flex-end;
   margin-top: 1rem;

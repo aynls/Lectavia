@@ -30,6 +30,74 @@ interface CatalogLookup {
   error?: string;
 }
 
+function ReasoningField({
+  model,
+  effort,
+  onChange,
+}: {
+  model?: CatalogModel;
+  effort: string;
+  onChange: (effort: string) => void;
+}) {
+  const id = useId();
+  const [manual, setManual] = useState(false);
+  const efforts = model?.reasoningEfforts ?? [];
+  const useManualEffort =
+    manual || (effort !== "" && !efforts.includes(effort));
+  const defaultLabel = model?.defaultEffort
+    ? `供应商默认（${model.defaultEffort}）`
+    : "供应商默认";
+
+  return (
+    <>
+      {efforts.length > 0 && (
+        <>
+          <label htmlFor={id}>思考强度</label>
+          <select
+            id={id}
+            name="reasoning-effort-choice"
+            value={useManualEffort ? "__manual__" : effort}
+            onChange={(event) => {
+              const value = event.target.value;
+              setManual(value === "__manual__");
+              if (value !== "__manual__") onChange(value);
+            }}
+          >
+            <option value="">{defaultLabel}</option>
+            {efforts.map((level) => (
+              <option key={level} value={level}>
+                {level}
+              </option>
+            ))}
+            <option value="__manual__">手动填写</option>
+          </select>
+        </>
+      )}
+      {(efforts.length === 0 || useManualEffort) && (
+        <>
+          <label htmlFor={id + "-custom"}>自定义思考强度</label>
+          <input
+            id={id + "-custom"}
+            name="reasoning-effort"
+            value={effort}
+            placeholder="留空时由供应商决定"
+            aria-describedby={efforts.length === 0 ? id + "-hint" : undefined}
+            spellCheck={false}
+            onChange={(event) => onChange(event.target.value)}
+          />
+          {efforts.length === 0 && (
+            <p id={id + "-hint"} className="muted settings-hint">
+              {model
+                ? "供应商未列出此模型的档位。"
+                : "获取模型列表后可自动检测支持的档位。"}
+            </p>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
 function ProviderFields({
   connection,
   setConnection,
@@ -58,7 +126,18 @@ function ProviderFields({
   ) {
     request.current++;
     setLookup(undefined);
-    setConnection({ ...connection, ...changes });
+    setConnection({ ...connection, ...changes, reasoningEffort: undefined });
+  }
+
+  function editModel(model: string) {
+    setConnection({
+      ...connection,
+      model,
+      reasoningEffort:
+        model.trim() === connection.model.trim()
+          ? connection.reasoningEffort
+          : undefined,
+    });
   }
 
   async function fetchModels() {
@@ -126,7 +205,7 @@ function ProviderFields({
             onChange={(event) => {
               const model = event.target.value;
               setManualModel(!model);
-              if (model) setConnection({ ...connection, model });
+              if (model) editModel(model);
             }}
           >
             <option value="">手动填写模型 ID</option>
@@ -147,11 +226,19 @@ function ProviderFields({
             value={connection.model}
             required
             spellCheck={false}
-            onChange={(event) =>
-              setConnection({ ...connection, model: event.target.value })
-            }
+            onChange={(event) => editModel(event.target.value)}
           />
         </>
+      )}
+      {purpose === "llm" && connection.model.trim() && (
+        <ReasoningField
+          key={connection.model.trim()}
+          model={selected}
+          effort={connection.reasoningEffort ?? ""}
+          onChange={(reasoningEffort) =>
+            setConnection({ ...connection, reasoningEffort })
+          }
+        />
       )}
     </fieldset>
   );
