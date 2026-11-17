@@ -8,5 +8,8 @@ fn main() {
     println!("cargo:rustc-env=LECTAVIA_APP_IDENTIFIER={identifier}");
 
     #[cfg(feature = "desktop")]
-    tauri_build::build();
+    {
+        println!("cargo:rerun-if-changed=icons/icon.ico");
+        tauri_build::build();
+    }
 }

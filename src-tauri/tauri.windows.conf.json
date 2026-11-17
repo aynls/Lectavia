@@ -3,6 +3,18 @@
     "beforeBuildCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-ffmpeg.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-online-media.ps1 && pnpm build"
   },
   "bundle": {
-    "resources": ["media-tools/ffmpeg", "media-tools/online"]
+    "resources": ["media-tools/ffmpeg", "media-tools/online"],
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "headerImage": "installer/nsis-header.bmp",
+        "sidebarImage": "installer/nsis-sidebar.bmp"
+      },
+      "wix": {
+        "bannerPath": "installer/wix-banner.bmp",
+        "dialogImagePath": "installer/wix-dialog.bmp"
+      }
+    }
   }
 }
