@@ -1,6 +1,7 @@
 mod media;
 mod models;
 mod output;
+mod prompt;
 
 pub fn run() {
     tauri::Builder::default()
@@ -17,6 +18,7 @@ pub fn run() {
             output::create_output_directory,
             output::write_output,
             output::reveal_output,
+            prompt::choose_prompt_file,
         ])
         .run(tauri::generate_context!())
         .expect("failed to launch Lectavia");
