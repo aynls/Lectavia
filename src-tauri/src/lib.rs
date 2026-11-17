@@ -22,6 +22,7 @@ pub fn run() {
             output::default_output_directory,
             output::validate_output_directory,
             output::write_output,
+            output::open_output,
             output::reveal_output,
             prompt::choose_prompt_file,
             settings::load_model_settings,

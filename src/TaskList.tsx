@@ -1,5 +1,6 @@
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { StackSimpleIcon } from "@phosphor-icons/react/dist/csr/StackSimple";
+import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { Icon } from "./Icon";
 import { errorMessage, renderMessage, type Message } from "./i18n";
@@ -23,6 +24,93 @@ interface TaskActions {
   ) => Promise<void>;
 }
 
+function TaskOutput({
+  path,
+  folder,
+  describedBy,
+  children,
+}: {
+  path?: string;
+  folder?: string;
+  describedBy?: string;
+  children?: ReactNode;
+}) {
+  const { t } = useTranslation();
+  const [opening, setOpening] = useState<"document" | "location">();
+  const [error, setError] = useState<Message>();
+  const location = path ?? folder;
+
+  async function open(action: "document" | "location") {
+    const target = action === "document" ? path : (folder ?? path);
+    if (!target || opening) return;
+
+    setError(undefined);
+    setOpening(action);
+    try {
+      if (action === "document") {
+        await invoke("open_output", { path: target });
+      } else {
+        await revealOutput(target, Boolean(folder));
+      }
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setOpening(undefined);
+    }
+  }
+
+  return (
+    <div className="task-output">
+      <div className="task-actions">
+        {path && (
+          <button
+            type="button"
+            className="primary"
+            aria-describedby={describedBy}
+            disabled={Boolean(opening)}
+            onClick={() => void open("document")}
+          >
+            <Icon name="document" />
+            {t(opening === "document" ? "task.opening" : "task.openDocument")}
+          </button>
+        )}
+        {location && (
+          <button
+            type="button"
+            aria-describedby={describedBy}
+            disabled={Boolean(opening)}
+            onClick={() => void open("location")}
+          >
+            <Icon name="folder" />
+            {t(
+              opening === "location"
+                ? "task.opening"
+                : folder
+                  ? "task.openFolder"
+                  : "task.reveal",
+            )}
+          </button>
+        )}
+        {children}
+      </div>
+      {error && (
+        <p className="error task-error" role="alert">
+          {renderMessage(t, error)}
+        </p>
+      )}
+      {location && (
+        <details className="task-location">
+          <summary aria-describedby={describedBy}>
+            <Icon name="down" />
+            {t("task.outputLocation")}
+          </summary>
+          <p className="task-output-path">{location}</p>
+        </details>
+      )}
+    </div>
+  );
+}
+
 function TaskCard({
   task,
   queue,
@@ -34,19 +122,25 @@ function TaskCard({
 } & TaskActions) {
   const { t } = useTranslation();
   const title = useRef<HTMLHeadingElement>(null);
-  const [revealError, setRevealError] = useState<Message>();
-  const [revealing, setRevealing] = useState(false);
   const [recovering, setRecovering] = useState(false);
   const [recoveryError, setRecoveryError] = useState<Message>();
-  const path = task.outputs.length
-    ? (task.outputDirectory ?? task.outputs[0])
-    : undefined;
   const multipart = task.parts.length > 1;
+  const singlePart = multipart ? undefined : task.parts[0];
+  const singlePartLabel = singlePart?.number
+    ? partLabel(
+        {
+          title: singlePart.title === task.title ? undefined : singlePart.title,
+          number: singlePart.number,
+        },
+        t,
+      )
+    : undefined;
   const runningIndex = task.parts.findIndex(
     (part) => part.status === "running",
   );
   const running = task.parts[runningIndex];
-  const stage = phases.findIndex((phase) => phase === running?.phase);
+  const phase = running?.phase;
+  const stage = phases.findIndex((step) => step === phase);
   const status = t(`task.status.${task.status}`);
   const failures = task.parts.filter((part) => part.status === "failed").length;
   const canRetry = task.status === "partial" || task.status === "failed";
@@ -78,45 +172,86 @@ function TaskCard({
       : detail;
   }
 
-  async function reveal() {
-    if (!path || revealing) return;
-
-    setRevealError(undefined);
-    setRevealing(true);
-    try {
-      await revealOutput(path, Boolean(task.outputDirectory));
-    } catch (error) {
-      setRevealError(errorMessage(error));
-    } finally {
-      setRevealing(false);
-    }
-  }
+  const actions = (
+    <>
+      {modelRecovery && (
+        <button
+          type="button"
+          className="primary"
+          aria-haspopup="dialog"
+          disabled={recovering}
+          onClick={() => void recover(modelRecovery)}
+        >
+          {t("task.updateModels")}
+        </button>
+      )}
+      {directoryRecovery && (
+        <button
+          type="button"
+          className={modelRecovery ? undefined : "primary"}
+          disabled={recovering}
+          onClick={() => void recover("outputDirectory")}
+        >
+          {t("task.changeFolder")}
+        </button>
+      )}
+      {canRetry && (
+        <button
+          type="button"
+          className={modelRecovery || directoryRecovery ? undefined : "primary"}
+          disabled={recovering}
+          onClick={() => {
+            setRecoveryError(undefined);
+            if (queue.retry(task.id)) focusTitle();
+          }}
+        >
+          {t("task.retry")}
+        </button>
+      )}
+      <button
+        type="button"
+        className="quiet"
+        onClick={() => onRestore(task.id)}
+      >
+        {t("task.restore")}
+      </button>
+    </>
+  );
 
   return (
     <li className="task enter">
       <div className="task-heading">
         <h3 ref={title} id={`task-${task.id}`} tabIndex={-1}>
           {task.title}
+          {singlePartLabel && (
+            <span className="task-part-subtitle">{singlePartLabel}</span>
+          )}
         </h3>
         <span className="task-status" data-status={task.status} role="status">
           <span className="sr-only">
-            {t("task.statusLabel", { title: task.title, status })}
+            {t("task.statusLabel", {
+              title: singlePartLabel
+                ? `${task.title} · ${singlePartLabel}`
+                : task.title,
+              status,
+            })}
           </span>
           <span aria-hidden="true">{status}</span>
         </span>
       </div>
-      {stage >= 0 && (
+      {phase && (
         <div className="task-progress">
           <p className="muted" role="status">
-            {partLabel(
-              {
-                title: t(`task.phase.${phases[stage]}`),
-                number: multipart
-                  ? (running.number ?? runningIndex + 1)
-                  : undefined,
-              },
-              t,
-            )}
+            {multipart
+              ? t("task.partProgress", {
+                  current: runningIndex + 1,
+                  total: task.parts.length,
+                  phase: partLabel(
+                    { title: t(`task.phase.${phase}`), number: running.number },
+                    t,
+                  ),
+                })
+              : t(`task.phase.${phase}`)}
           </p>
           <div className="phase-track" aria-hidden="true">
             {phases.map((phase, index) => (
@@ -150,102 +285,49 @@ function TaskCard({
             })}
           </summary>
           <ul className="task-parts">
-            {task.parts.map((part) => (
-              <li className="task-part" key={part.id}>
-                <span className="task-part-name">{partLabel(part, t)}</span>
-                <span className="task-status" data-status={part.status}>
-                  {t(
-                    part.status === "running" && part.phase
-                      ? `task.phase.${part.phase}`
-                      : `task.status.${part.status}`,
+            {task.parts.map((part, index) => {
+              const partTitleId = `task-part-${task.id}-${index}`;
+              return (
+                <li className="task-part" key={part.id}>
+                  <span className="task-part-name" id={partTitleId}>
+                    {partLabel(part, t)}
+                  </span>
+                  <span className="task-status" data-status={part.status}>
+                    {t(
+                      part.status === "running" && part.phase
+                        ? `task.phase.${part.phase}`
+                        : `task.status.${part.status}`,
+                    )}
+                  </span>
+                  {part.error && (
+                    <p className="error task-error">
+                      {describeFailure(part.error, part.phase)}
+                    </p>
                   )}
-                </span>
-                {part.error && (
-                  <p className="error task-error">
-                    {describeFailure(part.error, part.phase)}
-                  </p>
-                )}
-              </li>
-            ))}
+                  {part.outputPath && (
+                    <TaskOutput
+                      path={part.outputPath}
+                      describedBy={partTitleId}
+                    />
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </details>
       ) : (
-        task.parts[0]?.error && (
+        singlePart?.error && (
           <p className="error task-error">
-            {describeFailure(task.parts[0].error, task.parts[0].phase)}
+            {describeFailure(singlePart.error, singlePart.phase)}
           </p>
         )
       )}
-      {path && <p className="task-output-path">{path}</p>}
-      <div className="task-actions">
-        {path && (
-          <button
-            type="button"
-            onClick={() => void reveal()}
-            disabled={revealing}
-          >
-            <Icon name="folder" />
-            {t(
-              revealing
-                ? "task.opening"
-                : task.outputDirectory
-                  ? "task.openFolder"
-                  : "task.reveal",
-            )}
-          </button>
-        )}
-        {modelRecovery && (
-          <button
-            type="button"
-            className="primary"
-            aria-haspopup="dialog"
-            disabled={recovering}
-            onClick={() => void recover(modelRecovery)}
-          >
-            {t("task.updateModels")}
-          </button>
-        )}
-        {directoryRecovery && (
-          <button
-            type="button"
-            className={modelRecovery ? undefined : "primary"}
-            disabled={recovering}
-            onClick={() => void recover("outputDirectory")}
-          >
-            {t("task.changeFolder")}
-          </button>
-        )}
-        {canRetry && (
-          <button
-            type="button"
-            className={
-              modelRecovery || directoryRecovery ? undefined : "primary"
-            }
-            disabled={recovering}
-            onClick={() => {
-              setRecoveryError(undefined);
-              if (queue.retry(task.id)) focusTitle();
-            }}
-          >
-            {t("task.retry")}
-          </button>
-        )}
-        <button
-          type="button"
-          className="quiet"
-          onClick={() => onRestore(task.id)}
-        >
-          {t("task.restore")}
-        </button>
-      </div>
+      <TaskOutput path={singlePart?.outputPath} folder={task.outputDirectory}>
+        {actions}
+      </TaskOutput>
       {recoveryError && (
         <p className="error task-error" role="alert">
           {renderMessage(t, recoveryError)}
-        </p>
-      )}
-      {revealError && (
-        <p className="error task-error" role="alert">
-          {renderMessage(t, revealError)}
         </p>
       )}
     </li>

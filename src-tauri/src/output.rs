@@ -193,6 +193,31 @@ pub async fn write_output(
 }
 
 #[tauri::command]
+pub async fn open_output(app: tauri::AppHandle, path: String) -> Result<(), AppError> {
+    let target = Path::new(&path);
+    let document = target.extension().is_some_and(|extension| {
+        extension.eq_ignore_ascii_case("md") || extension.eq_ignore_ascii_case("txt")
+    });
+    let alternate_stream = cfg!(windows)
+        && target
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().contains(':'));
+    if !target.is_absolute()
+        || !document
+        || alternate_stream
+        || !target
+            .symlink_metadata()
+            .is_ok_and(|metadata| metadata.is_file())
+    {
+        return Err("error.outputGone".into());
+    }
+
+    app.opener()
+        .open_path(path, None::<&str>)
+        .map_err(|error| AppError::detail("error.outputOpen", error))
+}
+
+#[tauri::command]
 pub async fn reveal_output(
     app: tauri::AppHandle,
     path: String,

@@ -107,10 +107,13 @@ export default {
   "task.phase.organization": "原稿を整理",
   "task.phase.output": "ファイルを保存",
   "task.phaseError": "{{phase}}でエラーが発生しました。{{detail}}",
+  "task.partProgress": "{{current}} / {{total}} 件目 · {{phase}}",
   "task.saved": "保存済み {{saved}} / {{total}} 件",
   "task.savedWithFailures":
     "保存済み {{saved}} / {{total}} 件 · 失敗 {{failed}} 件",
   "task.opening": "開いています…",
+  "task.openDocument": "原稿を開く",
+  "task.outputLocation": "ファイルの場所",
   "task.openFolder": "出力フォルダーを開く",
   "task.reveal": "原稿の場所を開く",
   "task.retry": "失敗した項目を再試行",
@@ -304,6 +307,7 @@ export default {
   "error.outputSave": "原稿を保存できませんでした。{{detail}}",
   "error.outputGone": "作成したファイルまたはフォルダーは存在しません。",
   "error.outputReveal": "ファイルの場所を開けませんでした。{{detail}}",
+  "error.outputOpen": "原稿を開けませんでした。{{detail}}",
   "workspace.title": "動画から原稿へ",
   "media.intro":
     "動画の参照元として、リンクかローカルファイルのどちらかを選択します。",
