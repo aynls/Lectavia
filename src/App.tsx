@@ -54,7 +54,13 @@ function rememberFolder(path: string): void {
   }
 }
 
-export default function App() {
+export default function App({
+  initialSettings,
+  settingsError,
+}: {
+  initialSettings: ModelSettingsValue | null;
+  settingsError?: Message;
+}) {
   const { t } = useTranslation();
   const locale = currentLocale();
   const [sourceMode, setSourceMode] = useState<SourceMode>("link");
@@ -63,7 +69,7 @@ export default function App() {
   const [selectedParts, setSelectedParts] = useState<string[]>([]);
   const [previewing, setPreviewing] = useState(false);
   const [sourceError, setSourceError] = useState<Message>();
-  const [formError, setFormError] = useState<Message>();
+  const [formError, setFormError] = useState(settingsError);
   const [folder, setFolder] = useState("");
   const [folderStatus, setFolderStatus] = useState<FolderStatus>(
     desktop ? "checking" : "error",
@@ -72,7 +78,7 @@ export default function App() {
   const [format, setFormat] = useState<"md" | "txt">("md");
   const [instructions, setInstructions] = useState("");
   const [prompt, setPrompt] = useState<PromptFile | null>(null);
-  const [settings, setSettings] = useState<ModelSettingsValue | null>(null);
+  const [settings, setSettings] = useState(initialSettings);
   const [queueing, setQueueing] = useState(false);
   const composer = useRef<HTMLElement>(null);
   const restoreDialog = useRef<HTMLDialogElement>(null);
@@ -428,7 +434,10 @@ export default function App() {
             <ModelSettings
               value={settings ?? defaultModelSettings}
               configured={settings !== null}
-              onSave={(next) => {
+              onSave={async (next) => {
+                if (desktop) {
+                  await invoke("save_model_settings", { settings: next });
+                }
                 setSettings(next);
                 setFormError(undefined);
               }}

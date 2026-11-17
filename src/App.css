@@ -1342,6 +1342,9 @@ textarea {
 }
 
 .settings-body {
+  min-inline-size: 0;
+  margin: 0;
+  border: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;

@@ -95,8 +95,11 @@ export default {
     "モデル設定。整理モデル {{llm}}、文字起こしモデル {{asr}}",
   "model.configuredTitle": "整理：{{llm}}\n文字起こし：{{asr}}",
   "model.configuredSummary": "整理モデル · 文字起こし {{asr}}",
+  "model.savedKey":
+    "モデル設定と API キーはシステムの資格情報ストアに保存されます。",
   "model.sessionKey": "API キーはアプリを終了するまで保持されます。",
   "model.close": "モデル設定を閉じる",
+  "model.saving": "保存中…",
   "model.save": "設定を保存",
   "model.purpose.asr": "文字起こし",
   "model.purpose.llm": "原稿の整理",
@@ -244,6 +247,10 @@ export default {
   "error.modelRefusal": "原稿の整理モデルがこの内容の処理を拒否しました。",
   "error.modelEmpty": "原稿の整理モデルから利用可能な本文が返りませんでした。",
   "error.modelSetting": "{{purpose}}：{{cause}}",
+  "error.loadModelSettings":
+    "システムの資格情報ストアからモデル設定を読み込めませんでした。",
+  "error.saveModelSettings":
+    "システムの資格情報ストアにモデル設定を保存できませんでした。",
   "error.promptPath":
     "選択した Markdown ファイルのパスを取得できませんでした。",
   "error.promptName":

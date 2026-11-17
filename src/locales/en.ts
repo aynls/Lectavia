@@ -95,8 +95,11 @@ export default {
     "Model settings. Organization model {{llm}}, transcription model {{asr}}",
   "model.configuredTitle": "Organization: {{llm}}\nTranscription: {{asr}}",
   "model.configuredSummary": "Organization model · Transcription {{asr}}",
+  "model.savedKey":
+    "Model settings and API keys are saved in your system credential store.",
   "model.sessionKey": "API keys are kept for the current session only.",
   "model.close": "Close model settings",
+  "model.saving": "Saving…",
   "model.save": "Save settings",
   "model.purpose.asr": "Transcription",
   "model.purpose.llm": "Document organization",
@@ -240,6 +243,10 @@ export default {
   "error.modelEmpty":
     "The organization model returned no usable document text.",
   "error.modelSetting": "{{purpose}}: {{cause}}",
+  "error.loadModelSettings":
+    "Could not load model settings from the system credential store.",
+  "error.saveModelSettings":
+    "Could not save model settings to the system credential store.",
   "error.promptPath": "Could not read the path to the selected Markdown file.",
   "error.promptName": "Could not read the name of the selected Markdown file.",
   "error.promptRead": "Could not read the UTF-8 Markdown file. {{detail}}",

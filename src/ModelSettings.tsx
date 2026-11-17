@@ -1,4 +1,5 @@
 import { useId, useRef, useState, type SubmitEvent } from "react";
+import { isTauri } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { Icon } from "./Icon";
 import {
@@ -276,13 +277,14 @@ export function ModelSettings({
 }: {
   value: ModelSettingsValue;
   configured: boolean;
-  onSave: (value: ModelSettingsValue) => void;
+  onSave: (value: ModelSettingsValue) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const modal = useRef<HTMLDialogElement>(null);
-  const firstField = useRef<HTMLDivElement>(null);
+  const firstField = useRef<HTMLFieldSetElement>(null);
   const [draft, setDraft] = useState(value);
   const [error, setError] = useState<Message>();
+  const [saving, setSaving] = useState(false);
 
   function openSettings() {
     setDraft(value);
@@ -291,8 +293,9 @@ export function ModelSettings({
     firstField.current?.querySelector("input")?.focus();
   }
 
-  function saveSettings(event: SubmitEvent<HTMLFormElement>) {
+  async function saveSettings(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
 
     for (const purpose of ["asr", "llm"] as const) {
       try {
@@ -308,8 +311,20 @@ export function ModelSettings({
       }
     }
 
-    onSave(draft);
-    modal.current?.close();
+    setSaving(true);
+    try {
+      await onSave(draft);
+      modal.current?.close();
+    } catch (error) {
+      setError(
+        redactMessage(errorMessage(error, "error.saveModelSettings"), [
+          draft.asr.apiKey,
+          draft.llm.apiKey,
+        ]),
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -352,6 +367,9 @@ export function ModelSettings({
         className="settings-dialog"
         aria-labelledby="settings-title"
         aria-describedby="settings-description"
+        onCancel={(event) => {
+          if (saving) event.preventDefault();
+        }}
       >
         <form
           className="settings-form"
@@ -363,19 +381,24 @@ export function ModelSettings({
             <div>
               <h2 id="settings-title">{t("model.title")}</h2>
               <p id="settings-description" className="muted">
-                {t("model.settingsDescription")}
+                {t(isTauri() ? "model.savedKey" : "model.sessionKey")}
               </p>
             </div>
             <button
               type="button"
               className="quiet icon-button"
               aria-label={t("model.close")}
+              disabled={saving}
               onClick={() => modal.current?.close()}
             >
               <Icon name="close" />
             </button>
           </header>
-          <div className="settings-body" ref={firstField}>
+          <fieldset
+            className="settings-body"
+            ref={firstField}
+            disabled={saving}
+          >
             <ProviderFields
               connection={draft.asr}
               setConnection={(asr) =>
@@ -390,7 +413,7 @@ export function ModelSettings({
               }
               purpose="llm"
             />
-          </div>
+          </fieldset>
           <div className="settings-footer">
             {error && (
               <p className="error" role="alert">
@@ -398,11 +421,15 @@ export function ModelSettings({
               </p>
             )}
             <div className="actions settings-actions">
-              <button type="button" onClick={() => modal.current?.close()}>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => modal.current?.close()}
+              >
                 {t("common.cancel")}
               </button>
-              <button type="submit" className="primary">
-                {t("model.save")}
+              <button type="submit" className="primary" disabled={saving}>
+                {t(saving ? "model.saving" : "model.save")}
               </button>
             </div>
           </div>
