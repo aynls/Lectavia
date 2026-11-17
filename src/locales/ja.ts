@@ -43,6 +43,9 @@ export default {
   "media.part": "パート {{number}}",
   "media.partLabel": "P{{number}} · {{title}}",
   "output.settings": "原稿設定",
+  "output.presets": "整理指示のプリセット",
+  "output.choosePreset": "プリセットを選択",
+  "output.savePreset": "プリセットに保存",
   "output.instructions": "原稿の整理指示",
   "output.optional": "任意",
   "output.placeholder":
@@ -244,6 +247,8 @@ export default {
   "error.modelRefusal": "原稿の整理モデルがこの内容の処理を拒否しました。",
   "error.modelEmpty": "原稿の整理モデルから利用可能な本文が返りませんでした。",
   "error.modelSetting": "{{purpose}}：{{cause}}",
+  "error.saveInstructionPreset":
+    "整理指示のプリセットをこの端末に保存できませんでした。",
   "error.loadModelSettings":
     "システムの資格情報ストアからモデル設定を読み込めませんでした。",
   "error.saveModelSettings":

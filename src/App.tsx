@@ -19,6 +19,10 @@ import {
   type Message,
 } from "./i18n";
 import { Icon } from "./Icon";
+import {
+  loadInstructionPresets,
+  saveInstructionPreset,
+} from "./instruction-presets";
 import { inspectMedia, partLabel, type MediaInfo } from "./media";
 import {
   defaultModelSettings,
@@ -76,8 +80,11 @@ export default function App({
   );
   const [folderError, setFolderError] = useState<Message>();
   const [format, setFormat] = useState<"md" | "txt">("md");
-  const [instructions, setInstructions] = useState("");
-  const [prompt, setPrompt] = useState<PromptFile | null>(null);
+  const [draftInstructions, setDraftInstructions] = useState("");
+  const [importedPrompt, setImportedPrompt] = useState<PromptFile | null>(null);
+  const [presets, setPresets] = useState(loadInstructionPresets);
+  const [presetId, setPresetId] = useState("");
+  const [instructionsError, setInstructionsError] = useState<Message>();
   const [settings, setSettings] = useState(initialSettings);
   const [queueing, setQueueing] = useState(false);
   const composer = useRef<HTMLElement>(null);
@@ -87,6 +94,14 @@ export default function App({
   const linkInput = useRef<HTMLInputElement>(null);
   const requestId = useRef(0);
   const previewKey = useRef("");
+  const preset = presets.find((entry) => entry.id === presetId);
+  const prompt = preset ? preset.prompt : importedPrompt;
+  const instructions = prompt
+    ? ""
+    : (preset?.instructions ?? draftInstructions);
+  const canSavePreset = Boolean(
+    !preset && (prompt?.content ?? instructions).trim(),
+  );
   const selected = new Set(selectedParts);
   const localMedia = media?.parts[0]?.source.kind === "local";
   const folderReady = folderStatus === "ready" && Boolean(folder);
@@ -302,16 +317,44 @@ export default function App({
 
   async function choosePrompt() {
     const revision = workspaceRevision.current;
-    setFormError(undefined);
+    setInstructionsError(undefined);
     try {
       const file = await invoke<PromptFile | null>("choose_prompt_file", {
         title: t("output.promptDialog"),
         filterName: t("common.markdownFilter"),
       });
-      if (file && revision === workspaceRevision.current) setPrompt(file);
+      if (file && revision === workspaceRevision.current) {
+        setImportedPrompt(file);
+        setPresetId("");
+      }
     } catch (error) {
       if (revision !== workspaceRevision.current) return;
-      setFormError(errorMessage(error));
+      setInstructionsError(errorMessage(error));
+    }
+  }
+
+  function changeInstructions(text: string) {
+    setDraftInstructions(text);
+    setImportedPrompt(null);
+    setPresetId("");
+    setInstructionsError(undefined);
+  }
+
+  function removePrompt() {
+    setImportedPrompt(null);
+    setPresetId("");
+    setInstructionsError(undefined);
+  }
+
+  function savePreset() {
+    if (!canSavePreset) return;
+    setInstructionsError(undefined);
+    try {
+      const saved = saveInstructionPreset(instructions, prompt);
+      setPresets(saved.presets);
+      setPresetId(saved.selectedId);
+    } catch {
+      setInstructionsError(message("error.saveInstructionPreset"));
     }
   }
 
@@ -334,8 +377,10 @@ export default function App({
         : (URL.parse(request.link.trim())?.href ?? "");
     setMedia(request.media);
     setSelectedParts(request.selectedParts);
-    setInstructions(request.instructions);
-    setPrompt(request.prompt);
+    setDraftInstructions(request.instructions);
+    setImportedPrompt(request.prompt);
+    setPresetId("");
+    setInstructionsError(undefined);
     setFolder(request.outputDirectory);
     setFolderStatus("ready");
     setFolderError(undefined);
@@ -756,18 +801,71 @@ export default function App({
               </div>
               <div className="instructions-field">
                 <div className="field-label-row">
-                  <label htmlFor="custom-instructions">
-                    {t("output.instructions")}
-                  </label>
-                  <span>{t("output.optional")}</span>
+                  {prompt ? (
+                    <span className="option-label">
+                      {t("output.instructions")}
+                    </span>
+                  ) : (
+                    <label htmlFor="custom-instructions">
+                      {t("output.instructions")}
+                    </label>
+                  )}
+                  <span className="instruction-optional">
+                    {t("output.optional")}
+                  </span>
                 </div>
-                <textarea
-                  id="custom-instructions"
-                  rows={4}
-                  value={instructions}
-                  placeholder={t("output.placeholder")}
-                  onChange={(event) => setInstructions(event.target.value)}
-                />
+                <div className="preset-controls">
+                  <label htmlFor="instruction-preset" className="sr-only">
+                    {t("output.presets")}
+                  </label>
+                  <select
+                    id="instruction-preset"
+                    value={presetId}
+                    disabled={presets.length === 0}
+                    onChange={(event) => {
+                      setPresetId(event.target.value);
+                      setInstructionsError(undefined);
+                    }}
+                  >
+                    <option value="">{t("output.choosePreset")}</option>
+                    {presets.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="save-preset"
+                    disabled={!canSavePreset}
+                    onClick={savePreset}
+                  >
+                    <Icon name="save" />
+                    {t("output.savePreset")}
+                  </button>
+                </div>
+                {prompt ? (
+                  <div className="prompt-file">
+                    <Icon name="document" />
+                    <span title={prompt.name}>{prompt.name}</span>
+                    <button
+                      type="button"
+                      className="quiet icon-button"
+                      aria-label={t("common.removeFile", { name: prompt.name })}
+                      onClick={removePrompt}
+                    >
+                      <Icon name="close" />
+                    </button>
+                  </div>
+                ) : (
+                  <textarea
+                    id="custom-instructions"
+                    rows={4}
+                    value={instructions}
+                    placeholder={t("output.placeholder")}
+                    onChange={(event) => changeInstructions(event.target.value)}
+                  />
+                )}
                 <div className="prompt-import">
                   <button
                     type="button"
@@ -778,23 +876,12 @@ export default function App({
                     <Icon name="upload" />
                     {t(prompt ? "output.replace" : "output.import")}
                   </button>
-                  {prompt && (
-                    <div className="prompt-file">
-                      <Icon name="document" />
-                      <span title={prompt.name}>{prompt.name}</span>
-                      <button
-                        type="button"
-                        className="quiet icon-button"
-                        aria-label={t("common.removeFile", {
-                          name: prompt.name,
-                        })}
-                        onClick={() => setPrompt(null)}
-                      >
-                        <Icon name="close" />
-                      </button>
-                    </div>
-                  )}
                 </div>
+                {instructionsError && (
+                  <p className="error field-error" role="alert">
+                    {renderMessage(t, instructionsError)}
+                  </p>
+                )}
               </div>
             </section>
           </section>

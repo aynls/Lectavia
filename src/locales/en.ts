@@ -43,6 +43,9 @@ export default {
   "media.part": "Part {{number}}",
   "media.partLabel": "P{{number}} · {{title}}",
   "output.settings": "Document settings",
+  "output.presets": "Instruction presets",
+  "output.choosePreset": "Choose a preset",
+  "output.savePreset": "Save as preset",
   "output.instructions": "Organization instructions",
   "output.optional": "Optional",
   "output.placeholder":
@@ -240,6 +243,8 @@ export default {
   "error.modelEmpty":
     "The organization model returned no usable document text.",
   "error.modelSetting": "{{purpose}}: {{cause}}",
+  "error.saveInstructionPreset":
+    "Could not save the instruction preset on this device.",
   "error.loadModelSettings":
     "Could not load model settings from the system credential store.",
   "error.saveModelSettings":
