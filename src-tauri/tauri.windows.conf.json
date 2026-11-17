@@ -6,6 +6,7 @@
     "resources": ["media-tools/ffmpeg", "media-tools/online"],
     "windows": {
       "nsis": {
+        "installerHooks": "installer/refresh-icons.nsh",
         "installerIcon": "icons/icon.ico",
         "uninstallerIcon": "icons/icon.ico",
         "headerImage": "installer/nsis-header.bmp",
