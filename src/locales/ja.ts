@@ -10,6 +10,8 @@ export default {
   "workspace.desktopRequired":
     "動画の処理には Lectavia デスクトップアプリを使用してください。",
   "workspace.label": "原稿作成タスク",
+  "workspace.queued": "キューに追加しました · {{title}}",
+  "workspace.viewTask": "タスクを表示",
   "workspace.next": "先に次の操作を行ってください。{{steps}}",
   "workspace.need.checkLink": "動画リンクを確認",
   "workspace.need.reselectFile": "動画ファイルを選び直す",

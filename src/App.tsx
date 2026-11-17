@@ -102,6 +102,7 @@ export default function App({
   const [instructionsError, setInstructionsError] = useState<Message>();
   const [settings, setSettings] = useState(initialSettings);
   const [queueing, setQueueing] = useState(false);
+  const [queuedTask, setQueuedTask] = useState<{ id: string; title: string }>();
   const composer = useRef<HTMLElement>(null);
   const modelSettings = useRef<ModelSettingsHandle>(null);
   const restoreDialog = useRef<HTMLDialogElement>(null);
@@ -204,6 +205,7 @@ export default function App({
     setMedia(null);
     setSelectedParts([]);
     setSourceError(undefined);
+    setQueuedTask(undefined);
   }
 
   async function preview(source: VideoSource) {
@@ -517,10 +519,11 @@ export default function App({
     const revision = workspaceRevision.current;
     setFormError(undefined);
     setFolderError(undefined);
+    setQueuedTask(undefined);
     setQueueing(true);
     try {
       await invoke("validate_output_directory", { directory: folder });
-      queue.enqueue({
+      const taskId = queue.enqueue({
         link,
         media,
         selectedParts,
@@ -531,6 +534,7 @@ export default function App({
         prompt,
         ...settings,
       });
+      setQueuedTask({ id: taskId, title: media.title });
       if (revision === workspaceRevision.current) rememberFolder(folder);
     } catch (error) {
       if (revision !== workspaceRevision.current) return;
@@ -903,7 +907,9 @@ export default function App({
                             folder ? "output-folder-path" : undefined
                           }
                           onClick={chooseFolder}
-                          disabled={!desktop || folderStatus === "checking"}
+                          disabled={
+                            !desktop || folderStatus === "checking" || queueing
+                          }
                         >
                           {t(
                             folderStatus === "checking"
@@ -996,7 +1002,8 @@ export default function App({
               <button
                 type="button"
                 className="primary generate"
-                disabled={!canGenerate}
+                disabled={!canGenerate && !queueing}
+                aria-disabled={queueing || undefined}
                 aria-describedby={nextStep ? "next-step" : undefined}
                 onClick={() => void generate()}
               >
@@ -1005,6 +1012,24 @@ export default function App({
                 </span>
                 <Icon name="arrow" />
               </button>
+              <div className={queuedTask ? "queue-receipt" : "sr-only"}>
+                <p role="status" title={queuedTask?.title}>
+                  {queuedTask
+                    ? t("workspace.queued", { title: queuedTask.title })
+                    : null}
+                </p>
+                {queuedTask && (
+                  <button
+                    type="button"
+                    className="quiet readiness-action"
+                    onClick={() =>
+                      document.getElementById(`task-${queuedTask.id}`)?.focus()
+                    }
+                  >
+                    {t("workspace.viewTask")}
+                  </button>
+                )}
+              </div>
             </section>
           </section>
           <TaskList

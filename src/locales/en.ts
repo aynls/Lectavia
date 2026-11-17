@@ -10,6 +10,8 @@ export default {
   "workspace.desktopRequired":
     "Use the Lectavia desktop app to process videos.",
   "workspace.label": "Create a document task",
+  "workspace.queued": "Added to the queue · {{title}}",
+  "workspace.viewTask": "View task",
   "workspace.next": "To continue, {{steps}}.",
   "workspace.need.checkLink": "check the video link",
   "workspace.need.reselectFile": "choose another video file",

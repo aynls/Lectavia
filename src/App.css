@@ -966,6 +966,26 @@ button.readiness-action {
   color: var(--accent-text);
 }
 
+.queue-receipt {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-self: end;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  color: var(--success);
+  font-size: 0.875rem;
+}
+
+.queue-receipt > p {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .generate {
   grid-column: -2 / -1;
   justify-content: space-between;
@@ -974,6 +994,13 @@ button.readiness-action {
   padding-inline: 1rem;
   font-size: 0.95rem;
   font-weight: 720;
+}
+
+button.generate[aria-disabled="true"] {
+  border-color: var(--disabled);
+  background: var(--disabled);
+  color: var(--on-disabled);
+  cursor: progress;
 }
 
 .generate .icon {

@@ -95,7 +95,7 @@ function TaskCard({
   return (
     <li className="task enter">
       <div className="task-heading">
-        <h3 ref={title} tabIndex={-1}>
+        <h3 ref={title} id={`task-${task.id}`} tabIndex={-1}>
           {task.title}
         </h3>
         <span className="task-status" data-status={task.status} role="status">
@@ -261,6 +261,12 @@ export function TaskList({
 } & TaskActions) {
   const { t } = useTranslation();
   const tasks = useSyncExternalStore(queue.subscribe, queue.getSnapshot);
+  const orderedTasks = tasks
+    .slice()
+    .reverse()
+    .sort(
+      (a, b) => Number(b.status === "running") - Number(a.status === "running"),
+    );
 
   return (
     <section className="queue-panel" aria-labelledby="queue-heading">
@@ -293,18 +299,15 @@ export function TaskList({
           tabIndex={0}
           aria-label={t("task.list")}
         >
-          {tasks
-            .slice()
-            .reverse()
-            .map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                queue={queue}
-                onRestore={onRestore}
-                onRecover={onRecover}
-              />
-            ))}
+          {orderedTasks.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              queue={queue}
+              onRestore={onRestore}
+              onRecover={onRecover}
+            />
+          ))}
         </ul>
       )}
     </section>
