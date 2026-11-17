@@ -51,7 +51,7 @@ import logoUrl from "../design/lectavia-logo.svg";
 import "./App.css";
 
 type SourceMode = "link" | "local";
-type FolderStatus = "checking" | "ready" | "error";
+type FolderStatus = "unselected" | "checking" | "ready" | "error";
 
 const queue = new TaskQueue();
 const desktop = isTauri();
@@ -92,10 +92,9 @@ export default function App({
   const [formError, setFormError] = useState(settingsError);
   const [folder, setFolder] = useState("");
   const [folderStatus, setFolderStatus] = useState<FolderStatus>(
-    desktop ? "checking" : "error",
+    desktop ? "checking" : "unselected",
   );
   const [folderError, setFolderError] = useState<Message>();
-  const [usingDefaultFolder, setUsingDefaultFolder] = useState(false);
   const [format, setFormat] = useState<"md" | "txt">("md");
   const [draftInstructions, setDraftInstructions] = useState("");
   const [importedPrompt, setImportedPrompt] = useState<PromptFile | null>(null);
@@ -150,7 +149,7 @@ export default function App({
   } else if (selected.size === 0) {
     missing.push(t("workspace.need.parts"));
   }
-  if (folderStatus === "error" || (!folder && folderStatus !== "checking")) {
+  if (!folderReady && folderStatus !== "checking") {
     missing.push(t("workspace.need.folder"));
   }
 
@@ -164,37 +163,28 @@ export default function App({
   useEffect(() => {
     if (!desktop) return;
 
+    const previous = rememberedFolder();
+    if (!previous) {
+      setFolderStatus("unselected");
+      return;
+    }
+
     let active = true;
     const revision = workspaceRevision.current;
-    async function prepareFolder() {
-      const previous = rememberedFolder();
-      if (previous) {
-        try {
-          await invoke("validate_output_directory", { directory: previous });
-          if (!active || revision !== workspaceRevision.current) return;
-          setFolder(previous);
-          setFolderStatus("ready");
-          return;
-        } catch {
-          // An unavailable previous directory falls back to the default.
-        }
-      }
-
+    async function restoreFolder() {
       try {
-        const path = await invoke<string>("default_output_directory");
+        await invoke("validate_output_directory", { directory: previous });
         if (!active || revision !== workspaceRevision.current) return;
-        setFolder(path);
+        setFolder(previous);
         setFolderStatus("ready");
-        setUsingDefaultFolder(Boolean(previous));
-        rememberFolder(path);
       } catch {
         if (!active || revision !== workspaceRevision.current) return;
         setFolderStatus("error");
-        setFolderError(message("error.defaultFolder"));
+        setFolderError(message("error.unavailableFolder"));
       }
     }
 
-    void prepareFolder();
+    void restoreFolder();
     return () => {
       active = false;
     };
@@ -340,7 +330,6 @@ export default function App({
         if (revision !== workspaceRevision.current) return;
         setFolder(path);
         setFolderStatus("ready");
-        setUsingDefaultFolder(false);
         rememberFolder(path);
       } catch (error) {
         if (revision !== workspaceRevision.current) return;
@@ -429,7 +418,6 @@ export default function App({
     setFolder(request.outputDirectory);
     setFolderStatus("ready");
     setFolderError(undefined);
-    setUsingDefaultFolder(false);
     setFormat(request.format);
     setFormError(undefined);
     composer.current?.focus();
@@ -910,20 +898,13 @@ export default function App({
                         >
                           {t(
                             folderStatus === "checking"
-                              ? folder
-                                ? "output.checkingFolder"
-                                : "output.preparingFolder"
+                              ? "output.checkingFolder"
                               : folder
                                 ? "output.changeLocation"
                                 : "output.chooseFolder",
                           )}
                         </button>
                       </div>
-                      {usingDefaultFolder && folderStatus === "ready" && (
-                        <p className="muted field-error" role="status">
-                          {t("output.usingDefaultFolder")}
-                        </p>
-                      )}
                       {folderError && (
                         <p className="error field-error" role="alert">
                           {renderMessage(t, folderError)}

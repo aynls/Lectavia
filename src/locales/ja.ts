@@ -62,10 +62,7 @@ export default {
   "output.location": "保存先",
   "output.changeLocation": "変更…",
   "output.chooseFolder": "保存フォルダーを選択",
-  "output.preparingFolder": "既定のフォルダーを準備中…",
   "output.checkingFolder": "確認中…",
-  "output.usingDefaultFolder":
-    "前回の保存先を使用できないため、既定のフォルダーを使用します。",
   "output.chooseDialog": "出力フォルダーを選択",
   "output.format": "ファイル形式",
   "output.generate": "原稿を作成",
@@ -165,8 +162,6 @@ export default {
   "error.external": "操作に失敗しました。{{detail}}",
   "error.taskFailed": "タスクの処理に失敗しました。",
   "error.background": "バックグラウンド処理を完了できませんでした。{{detail}}",
-  "error.defaultFolder":
-    "既定の保存フォルダーを準備できませんでした。保存先を選択してください。",
   "error.invalidVideoLink":
     "有効な Bilibili または YouTube の HTTPS リンクを入力してください。",
   "error.openVideoDialog": "動画の選択画面を開けませんでした。",
@@ -287,9 +282,6 @@ export default {
   "error.promptRead":
     "UTF-8 の Markdown ファイルを読み込めませんでした。{{detail}}",
   "error.folderInvalid": "保存フォルダーが存在しないか、アクセスできません。",
-  "error.defaultFolderLocation": "既定の保存先が見つかりません。{{detail}}",
-  "error.defaultFolderCreate":
-    "既定の保存フォルダーを作成できませんでした。{{detail}}",
   "error.folderNotWritable": "保存フォルダーに書き込めません。{{detail}}",
   "error.folderCreate": "保存先のフォルダーを作成できませんでした。{{detail}}",
   "error.outputFormat":

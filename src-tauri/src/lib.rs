@@ -19,7 +19,6 @@ pub fn run() {
             models::transcribe_audio_chunk,
             models::complete_text,
             output::create_output_directory,
-            output::default_output_directory,
             output::validate_output_directory,
             output::write_output,
             output::open_output,

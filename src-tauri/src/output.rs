@@ -82,21 +82,6 @@ fn selected_directory(path: &str) -> Result<&Path, AppError> {
 }
 
 #[tauri::command]
-pub async fn default_output_directory(app: tauri::AppHandle) -> Result<String, AppError> {
-    use tauri::Manager;
-
-    let base = app
-        .path()
-        .document_dir()
-        .or_else(|_| app.path().home_dir())
-        .map_err(|error| AppError::detail("error.defaultFolderLocation", error))?;
-    let directory = base.join("Lectavia");
-    fs::create_dir_all(&directory)
-        .map_err(|error| AppError::detail("error.defaultFolderCreate", error))?;
-    validate_output_directory(directory.to_string_lossy().into_owned()).await
-}
-
-#[tauri::command]
 pub async fn validate_output_directory(directory: String) -> Result<String, AppError> {
     let directory = selected_directory(&directory)?;
     NamedTempFile::new_in(directory)

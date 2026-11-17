@@ -61,10 +61,7 @@ export default {
   "output.location": "Save location",
   "output.changeLocation": "Change…",
   "output.chooseFolder": "Choose an output folder",
-  "output.preparingFolder": "Preparing the default folder…",
   "output.checkingFolder": "Checking…",
-  "output.usingDefaultFolder":
-    "The last save location is unavailable. Using the default folder.",
   "output.chooseDialog": "Choose an output folder",
   "output.format": "File format",
   "output.generate": "Generate document",
@@ -163,8 +160,6 @@ export default {
   "error.external": "The operation failed. {{detail}}",
   "error.taskFailed": "The task failed.",
   "error.background": "A background operation could not finish. {{detail}}",
-  "error.defaultFolder":
-    "Could not prepare the default output folder. Choose a folder manually.",
   "error.invalidVideoLink": "Enter a valid Bilibili or YouTube HTTPS link.",
   "error.openVideoDialog": "Could not open the video picker.",
   "error.openFolderDialog": "Could not open the folder picker.",
@@ -278,10 +273,6 @@ export default {
   "error.promptRead": "Could not read the UTF-8 Markdown file. {{detail}}",
   "error.folderInvalid":
     "The output folder does not exist or cannot be accessed.",
-  "error.defaultFolderLocation":
-    "Could not find the default save location. {{detail}}",
-  "error.defaultFolderCreate":
-    "Could not create the default output folder. {{detail}}",
   "error.folderNotWritable": "Cannot write to the output folder. {{detail}}",
   "error.folderCreate": "Could not create the output folder. {{detail}}",
   "error.outputFormat": "Choose Markdown or plain text as the output format.",
