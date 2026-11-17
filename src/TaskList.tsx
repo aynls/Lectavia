@@ -4,24 +4,40 @@ import { useTranslation } from "react-i18next";
 import { Icon } from "./Icon";
 import { errorMessage, renderMessage, type Message } from "./i18n";
 import { partLabel } from "./media";
-import { revealOutput, type Task, type TaskQueue } from "./tasks";
+import {
+  revealOutput,
+  type Task,
+  type TaskQueue,
+  type TaskRecovery,
+} from "./tasks";
 import "./TaskList.css";
 
 const phases = ["audio", "transcription", "organization", "output"] as const;
+
+interface TaskActions {
+  onRestore: (taskId: string) => void;
+  onRecover: (
+    task: Task,
+    action: TaskRecovery,
+    onRetried: () => void,
+  ) => Promise<void>;
+}
 
 function TaskCard({
   task,
   queue,
   onRestore,
+  onRecover,
 }: {
   task: Task;
   queue: TaskQueue;
-  onRestore: (taskId: string) => void;
-}) {
+} & TaskActions) {
   const { t } = useTranslation();
   const title = useRef<HTMLHeadingElement>(null);
   const [revealError, setRevealError] = useState<Message>();
   const [revealing, setRevealing] = useState(false);
+  const [recovering, setRecovering] = useState(false);
+  const [recoveryError, setRecoveryError] = useState<Message>();
   const path = task.outputs.length
     ? (task.outputDirectory ?? task.outputs[0])
     : undefined;
@@ -34,6 +50,33 @@ function TaskCard({
   const status = t(`task.status.${task.status}`);
   const failures = task.parts.filter((part) => part.status === "failed").length;
   const canRetry = task.status === "partial" || task.status === "failed";
+  const modelRecovery = task.recovery.find(
+    (action) => action !== "outputDirectory",
+  );
+  const directoryRecovery = task.recovery.includes("outputDirectory");
+
+  function focusTitle() {
+    title.current?.focus({ preventScroll: true });
+  }
+
+  async function recover(action: TaskRecovery) {
+    setRecoveryError(undefined);
+    setRecovering(true);
+    try {
+      await onRecover(task, action, focusTitle);
+    } catch (error) {
+      setRecoveryError(errorMessage(error));
+    } finally {
+      setRecovering(false);
+    }
+  }
+
+  function describeFailure(error: Message, phase?: Task["failurePhase"]) {
+    const detail = renderMessage(t, error);
+    return phase
+      ? t("task.phaseError", { phase: t(`task.phase.${phase}`), detail })
+      : detail;
+  }
 
   async function reveal() {
     if (!path || revealing) return;
@@ -92,7 +135,9 @@ function TaskCard({
         </div>
       )}
       {task.error && (
-        <p className="error task-error">{renderMessage(t, task.error)}</p>
+        <p className="error task-error">
+          {describeFailure(task.error, task.failurePhase)}
+        </p>
       )}
       {multipart ? (
         <details className="task-details">
@@ -117,7 +162,7 @@ function TaskCard({
                 </span>
                 {part.error && (
                   <p className="error task-error">
-                    {renderMessage(t, part.error)}
+                    {describeFailure(part.error, part.phase)}
                   </p>
                 )}
               </li>
@@ -127,7 +172,7 @@ function TaskCard({
       ) : (
         task.parts[0]?.error && (
           <p className="error task-error">
-            {renderMessage(t, task.parts[0].error)}
+            {describeFailure(task.parts[0].error, task.parts[0].phase)}
           </p>
         )
       )}
@@ -149,21 +194,55 @@ function TaskCard({
             )}
           </button>
         )}
+        {modelRecovery && (
+          <button
+            type="button"
+            className="primary"
+            aria-haspopup="dialog"
+            disabled={recovering}
+            onClick={() => void recover(modelRecovery)}
+          >
+            {t("task.updateModels")}
+          </button>
+        )}
+        {directoryRecovery && (
+          <button
+            type="button"
+            className={modelRecovery ? undefined : "primary"}
+            disabled={recovering}
+            onClick={() => void recover("outputDirectory")}
+          >
+            {t("task.changeFolder")}
+          </button>
+        )}
         {canRetry && (
           <button
             type="button"
+            className={
+              modelRecovery || directoryRecovery ? undefined : "primary"
+            }
+            disabled={recovering}
             onClick={() => {
-              queue.retry(task.id);
-              title.current?.focus({ preventScroll: true });
+              setRecoveryError(undefined);
+              if (queue.retry(task.id)) focusTitle();
             }}
           >
             {t("task.retry")}
           </button>
         )}
-        <button type="button" onClick={() => onRestore(task.id)}>
+        <button
+          type="button"
+          className="quiet"
+          onClick={() => onRestore(task.id)}
+        >
           {t("task.restore")}
         </button>
       </div>
+      {recoveryError && (
+        <p className="error task-error" role="alert">
+          {renderMessage(t, recoveryError)}
+        </p>
+      )}
       {revealError && (
         <p className="error task-error" role="alert">
           {renderMessage(t, revealError)}
@@ -176,10 +255,10 @@ function TaskCard({
 export function TaskList({
   queue,
   onRestore,
+  onRecover,
 }: {
   queue: TaskQueue;
-  onRestore: (taskId: string) => void;
-}) {
+} & TaskActions) {
   const { t } = useTranslation();
   const tasks = useSyncExternalStore(queue.subscribe, queue.getSnapshot);
 
@@ -223,6 +302,7 @@ export function TaskList({
                 task={task}
                 queue={queue}
                 onRestore={onRestore}
+                onRecover={onRecover}
               />
             ))}
         </ul>

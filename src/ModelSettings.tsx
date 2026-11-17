@@ -35,6 +35,7 @@ export interface ModelSettingsValue {
 
 interface ModelSettingsOpenOptions {
   purpose?: ModelPurpose;
+  saveAndRetry?: boolean;
   onSaved?: (value: ModelSettingsValue) => void;
 }
 
@@ -380,6 +381,7 @@ export function ModelSettings({
   const [validation, setValidation] = useState<SettingsErrors>();
   const [focus, setFocus] = useState<ModelSettingsFocus>();
   const [saving, setSaving] = useState(false);
+  const [saveAndRetry, setSaveAndRetry] = useState(false);
 
   useLayoutEffect(() => {
     if (!focus || !modal.current?.open) return;
@@ -396,6 +398,7 @@ export function ModelSettings({
     if (!dialog || dialog.open) return;
 
     const errors = validateSettings(value);
+    setSaveAndRetry(Boolean(options.saveAndRetry));
     setDraft(value);
     setError(undefined);
     setValidation(undefined);
@@ -553,7 +556,13 @@ export function ModelSettings({
                 {t("common.cancel")}
               </button>
               <button type="submit" className="primary" disabled={saving}>
-                {t(saving ? "model.saving" : "model.save")}
+                {t(
+                  saving
+                    ? "model.saving"
+                    : saveAndRetry
+                      ? "model.saveAndRetry"
+                      : "model.save",
+                )}
               </button>
             </div>
           </div>

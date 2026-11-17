@@ -36,7 +36,14 @@ import {
   type ModelSettingsValue,
 } from "./ModelSettings";
 import { TaskList } from "./TaskList";
-import { TaskQueue, type PromptFile, type TaskRequest } from "./tasks";
+import {
+  TaskQueue,
+  type PromptFile,
+  type Task,
+  type TaskRecovery,
+  type TaskRequest,
+  type TaskRetryUpdates,
+} from "./tasks";
 import { parseVideoLink, type VideoSource } from "./video-source";
 import logoUrl from "../design/lectavia-logo.svg";
 import "./App.css";
@@ -424,13 +431,23 @@ export default function App({
     setFolderError(undefined);
     setUsingDefaultFolder(false);
     setFormat(request.format);
-    setSettings({ asr: request.asr, llm: request.llm });
     setFormError(undefined);
     composer.current?.focus();
   }
 
   function restoreTask(taskId: string) {
-    if (link.trim() || media || instructions.trim() || prompt) {
+    const request = queue.getRequest(taskId);
+    if (!request) return;
+
+    if (
+      link.trim() ||
+      media ||
+      draftInstructions.trim() ||
+      importedPrompt ||
+      presetId ||
+      format !== "md" ||
+      (folder && folder !== request.outputDirectory)
+    ) {
       const dialog = restoreDialog.current;
       if (dialog) {
         pendingRestoreId.current = taskId;
@@ -440,8 +457,7 @@ export default function App({
       return;
     }
 
-    const request = queue.getRequest(taskId);
-    if (request) restoreRequest(request);
+    restoreRequest(request);
   }
 
   function finishRestore(dialog: HTMLDialogElement) {
@@ -455,6 +471,44 @@ export default function App({
       const request = queue.getRequest(taskId);
       if (request) restoreRequest(request);
     }
+  }
+
+  async function recoverTask(
+    task: Task,
+    action: TaskRecovery,
+    onRetried: () => void,
+  ) {
+    if (action !== "outputDirectory") {
+      modelSettings.current?.open({
+        purpose: action,
+        saveAndRetry: true,
+        onSaved: (next) => {
+          const updates: TaskRetryUpdates = {};
+          if (task.recovery.includes("asr")) updates.asr = next.asr;
+          if (task.recovery.includes("llm")) updates.llm = next.llm;
+          if (queue.retry(task.id, updates)) onRetried();
+        },
+      });
+      return;
+    }
+
+    let path: string | null;
+    try {
+      path = await open({
+        title: t("output.chooseDialog"),
+        directory: true,
+        multiple: false,
+        defaultPath: folderReady ? folder : undefined,
+      });
+    } catch {
+      throw message("error.openFolderDialog");
+    }
+    if (!path) return;
+
+    const directory = await invoke<string>("validate_output_directory", {
+      directory: path,
+    });
+    if (queue.retry(task.id, { outputDirectory: directory })) onRetried();
   }
 
   async function generate() {
@@ -953,7 +1007,11 @@ export default function App({
               </button>
             </section>
           </section>
-          <TaskList queue={queue} onRestore={restoreTask} />
+          <TaskList
+            queue={queue}
+            onRestore={restoreTask}
+            onRecover={recoverTask}
+          />
         </div>
       </main>
       <dialog

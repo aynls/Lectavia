@@ -6,6 +6,7 @@ import {
   translator,
   type Locale,
   type Message,
+  type MessageKey,
 } from "./i18n";
 import {
   prepareAudio,
@@ -23,6 +24,8 @@ type OutputFormat = "md" | "txt";
 type PartStatus = "queued" | "running" | "completed" | "failed";
 type TaskStatus = PartStatus | "partial";
 type Phase = "audio" | "transcription" | "organization" | "output";
+
+export type TaskRecovery = "asr" | "llm" | "outputDirectory";
 
 export interface PromptFile {
   name: string;
@@ -42,6 +45,8 @@ export interface TaskRequest {
   llm: ModelConnection;
 }
 
+export type TaskRetryUpdates = Partial<Pick<TaskRequest, TaskRecovery>>;
+
 export interface TaskPart {
   readonly id: string;
   readonly title?: string;
@@ -50,6 +55,7 @@ export interface TaskPart {
   readonly phase?: Phase;
   readonly error?: Message;
   readonly outputPath?: string;
+  readonly outputDirectory?: string;
 }
 
 export interface Task {
@@ -60,6 +66,8 @@ export interface Task {
   readonly outputs: readonly string[];
   readonly outputDirectory?: string;
   readonly error?: Message;
+  readonly failurePhase?: Phase;
+  readonly recovery: readonly TaskRecovery[];
 }
 
 interface QueuedPart {
@@ -73,6 +81,55 @@ interface Job {
   request: TaskRequest;
   parts: QueuedPart[];
   instructions?: string;
+  multipartDirectory?: string;
+}
+
+const modelSettingErrors = new Set<MessageKey>([
+  "error.baseUrl",
+  "error.baseUrlHasRoute",
+  "error.credentials",
+  "error.apiKey",
+  "error.modelId",
+  "error.providerConnect",
+  "error.providerJson",
+  "error.httpBadRequest",
+  "error.httpAccess",
+  "error.httpNotFound",
+  "error.httpPayment",
+  "error.httpRedirect",
+  "error.transcriptionMissing",
+  "error.outputLength",
+  "error.modelEmpty",
+]);
+
+const directoryErrors = new Set<MessageKey>([
+  "error.folderInvalid",
+  "error.folderNotWritable",
+  "error.folderCreate",
+  "error.outputTemp",
+  "error.outputWrite",
+  "error.outputSave",
+]);
+
+function hasErrorKey(error: Message, keys: ReadonlySet<MessageKey>): boolean {
+  return (
+    keys.has(error.key) ||
+    Object.values(error.values ?? {}).some(
+      (value) => typeof value === "object" && hasErrorKey(value, keys),
+    )
+  );
+}
+
+function recoveryFor(error: Message, phase?: Phase): TaskRecovery | undefined {
+  if (phase === "output" && hasErrorKey(error, directoryErrors)) {
+    return "outputDirectory";
+  }
+  if (
+    (phase === "transcription" || phase === "organization") &&
+    hasErrorKey(error, modelSettingErrors)
+  ) {
+    return phase === "transcription" ? "asr" : "llm";
+  }
 }
 
 function failureMessage(error: unknown, job: Job): Message {
@@ -140,6 +197,7 @@ export class TaskQueue {
         status: "queued",
       })),
       outputs: [],
+      recovery: [],
     };
 
     const instructions = [
@@ -161,19 +219,33 @@ export class TaskQueue {
     void this.drain();
   }
 
-  retry(taskId: string): void {
+  retry(taskId: string, updates: TaskRetryUpdates = {}): boolean {
     const job = this.#jobs.get(taskId);
     if (
       !job ||
-      (job.task.status !== "partial" && job.task.status !== "failed")
+      (job.task.status !== "partial" && job.task.status !== "failed") ||
+      (updates.outputDirectory !== undefined && !updates.outputDirectory.trim())
     ) {
-      return;
+      return false;
     }
 
+    // Explicitly choosing a destination also recovers a removed multipart folder.
+    if (updates.outputDirectory !== undefined) {
+      job.multipartDirectory = undefined;
+    }
+    // Finished stages remain reusable. Only stages that run again use the new connections.
+    job.request = {
+      ...job.request,
+      asr: updates.asr ? { ...updates.asr } : job.request.asr,
+      llm: updates.llm ? { ...updates.llm } : job.request.llm,
+      outputDirectory: updates.outputDirectory ?? job.request.outputDirectory,
+    };
     this.#pending.push(job);
     this.update(job, {
       status: "queued",
       error: undefined,
+      failurePhase: undefined,
+      recovery: [],
       parts: job.task.parts.map((part) =>
         part.status === "failed"
           ? { ...part, status: "queued", phase: undefined, error: undefined }
@@ -181,6 +253,7 @@ export class TaskQueue {
       ),
     });
     void this.drain();
+    return true;
   }
 
   private publish(): void {
@@ -204,7 +277,19 @@ export class TaskQueue {
     const outputs = parts.flatMap((part) =>
       part.outputPath ? [part.outputPath] : [],
     );
-    this.update(job, { parts, outputs });
+    const outputDirectories = Array.from(
+      new Set(
+        parts.flatMap((part) =>
+          part.outputDirectory ? [part.outputDirectory] : [],
+        ),
+      ),
+    );
+    this.update(job, {
+      parts,
+      outputs,
+      outputDirectory:
+        outputDirectories.length === 1 ? outputDirectories[0] : undefined,
+    });
   }
 
   private async drain(): Promise<void> {
@@ -225,19 +310,31 @@ export class TaskQueue {
     this.update(job, { status: "running" });
 
     const { media, outputDirectory } = job.request;
-    if (media.multipart && !job.task.outputDirectory) {
+    if (media.multipart && !job.multipartDirectory) {
       try {
-        const directory = await invoke<string>("create_output_directory", {
-          directory: outputDirectory,
-          title: job.task.title,
-          fallbackTitle: translator(job.request.locale)("output.fallbackTitle"),
-        });
-        this.update(job, { outputDirectory: directory });
+        job.multipartDirectory = await invoke<string>(
+          "create_output_directory",
+          {
+            directory: outputDirectory,
+            title: job.task.title,
+            fallbackTitle: translator(job.request.locale)(
+              "output.fallbackTitle",
+            ),
+          },
+        );
       } catch (error) {
+        const failure = failureMessage(error, job);
+        const action = recoveryFor(failure, "output");
         this.update(job, {
-          status: "failed",
-          error: failureMessage(error, job),
-          parts: job.task.parts.map((part) => ({ ...part, status: "failed" })),
+          status: job.task.outputs.length > 0 ? "partial" : "failed",
+          error: failure,
+          failurePhase: "output",
+          recovery: action ? [action] : [],
+          parts: job.task.parts.map((part) =>
+            part.status === "queued"
+              ? { ...part, status: "failed", phase: "output" }
+              : part,
+          ),
         });
         return;
       }
@@ -248,13 +345,20 @@ export class TaskQueue {
     }
 
     const { parts, outputs } = job.task;
+    const recovery = new Set<TaskRecovery>();
+    for (const part of parts) {
+      if (part.status === "failed" && part.error) {
+        const action = recoveryFor(part.error, part.phase);
+        if (action) recovery.add(action);
+      }
+    }
     const status =
       outputs.length === parts.length
         ? "completed"
         : outputs.length > 0
           ? "partial"
           : "failed";
-    this.update(job, { status });
+    this.update(job, { status, recovery: Array.from(recovery) });
   }
 
   private async runPart(job: Job, index: number): Promise<void> {
@@ -297,7 +401,7 @@ export class TaskQueue {
 
       setPhase("output");
       const outputPath = await invoke<string>("write_output", {
-        directory: job.task.outputDirectory ?? outputDirectory,
+        directory: job.multipartDirectory ?? outputDirectory,
         title: media.multipart ? partTitle : job.task.title,
         labels: {
           fallbackTitle: t("output.fallbackTitle"),
@@ -312,6 +416,7 @@ export class TaskQueue {
         status: "completed",
         phase: undefined,
         outputPath,
+        outputDirectory: job.multipartDirectory,
       });
     } catch (error) {
       this.updatePart(job, index, {
