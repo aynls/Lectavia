@@ -34,6 +34,7 @@ import {
   type ModelSettingsHandle,
   type ModelSettingsValue,
 } from "./ModelSettings";
+import { outputLanguages, type OutputLanguage } from "./output-language";
 import { SettingsPage } from "./SettingsPage";
 import { TaskList } from "./TaskList";
 import {
@@ -114,6 +115,9 @@ export default function App({
   );
   const [folderError, setFolderError] = useState<Message>();
   const [format, setFormat] = useState<"md" | "txt">("md");
+  const [outputLanguage, setOutputLanguage] = useState<
+    OutputLanguage | "application"
+  >("application");
   const [draftInstructions, setDraftInstructions] = useState("");
   const [importedPrompt, setImportedPrompt] = useState<PromptFile | null>(null);
   const [presets, setPresets] = useState(loadInstructionPresets);
@@ -438,6 +442,7 @@ export default function App({
     setFolderStatus("ready");
     setFolderError(undefined);
     setFormat(request.format);
+    setOutputLanguage(request.outputLanguage);
     setFormError(undefined);
     composer.current?.focus();
   }
@@ -453,6 +458,7 @@ export default function App({
       importedPrompt ||
       presetId ||
       format !== "md" ||
+      outputLanguage !== "application" ||
       (folder && folder !== request.outputDirectory)
     ) {
       const dialog = restoreDialog.current;
@@ -533,6 +539,8 @@ export default function App({
         selectedParts,
         outputDirectory: folder,
         locale,
+        outputLanguage:
+          outputLanguage === "application" ? locale : outputLanguage,
         format,
         instructions,
         prompt,
@@ -909,6 +917,33 @@ export default function App({
                           {renderMessage(t, folderError)}
                         </p>
                       )}
+                    </div>
+                    <div className="option">
+                      <label htmlFor="output-language">
+                        {t("output.language")}
+                      </label>
+                      <select
+                        name="output-language"
+                        id="output-language"
+                        value={outputLanguage}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setOutputLanguage(
+                            outputLanguages.find(
+                              (language) => language === value,
+                            ) ?? "application",
+                          );
+                        }}
+                      >
+                        <option value="application">
+                          {t("output.followApplicationLanguage")}
+                        </option>
+                        {outputLanguages.map((language) => (
+                          <option key={language} value={language}>
+                            {t(`outputLanguage.${language}`)}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div className="option">
                       <label htmlFor="output-format">

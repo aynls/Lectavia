@@ -20,6 +20,7 @@ import {
   transcribeAudio,
   type ModelConnection,
 } from "./models";
+import type { OutputLanguage } from "./output-language";
 
 type OutputFormat = "md" | "txt";
 type PartStatus = "queued" | "running" | "completed" | "failed";
@@ -39,6 +40,7 @@ export interface TaskRequest {
   selectedParts: string[];
   outputDirectory: string;
   locale: Locale;
+  outputLanguage: OutputLanguage;
   format: OutputFormat;
   instructions: string;
   prompt: PromptFile | null;
@@ -403,6 +405,7 @@ export class TaskQueue {
         part.material = await organizeTranscript(part.transcript, {
           connection: llm,
           locale,
+          outputLanguage: job.request.outputLanguage,
           videoTitle: media.title,
           partTitle: media.multipart ? partLabel(part.media, t) : undefined,
           description: media.description,

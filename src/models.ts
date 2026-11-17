@@ -6,6 +6,7 @@ import {
   type Locale,
   type Message,
 } from "./i18n";
+import type { OutputLanguage } from "./output-language";
 
 interface ModelEndpoint {
   baseUrl: string;
@@ -46,6 +47,7 @@ interface ChatMessage {
 interface OrganizationOptions {
   connection: ModelConnection;
   locale: Locale;
+  outputLanguage: OutputLanguage;
   videoTitle: string;
   partTitle?: string;
   description?: string;
@@ -266,15 +268,13 @@ function splitTranscript(transcript: string): string[] {
 
 function organizationPrompt(options: OrganizationOptions): string {
   const t = translator(options.locale);
-  const format = t(
-    options.format === "md" ? "prompt.markdown" : "prompt.plainText",
-  );
+  const language = t(`outputLanguage.${options.outputLanguage}`);
   const prompt = [
-    [t("prompt.intro"), format].join(options.locale === "en" ? " " : ""),
+    t(options.format === "md" ? "prompt.markdown" : "prompt.plainText", {
+      language,
+    }),
     t("prompt.fidelity"),
-    [t("prompt.untrusted"), t("prompt.bodyOnly")].join(
-      options.locale === "en" ? " " : "",
-    ),
+    t("prompt.context"),
     t("prompt.priority"),
   ];
 
