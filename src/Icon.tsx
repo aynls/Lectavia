@@ -7,6 +7,7 @@ const paths = {
   link: "M10 13a4 4 0 0 0 6 .5l3-3a4 4 0 0 0-5.7-5.7l-1.7 1.7m2.4 4.5a4 4 0 0 0-6-.5l-3 3a4 4 0 0 0 5.7 5.7l1.7-1.7",
   down: "m6 9 6 6 6-6",
   arrow: "M5 12h14m-6-6 6 6-6 6",
+  close: "m6 6 12 12M6 18 18 6",
 };
 
 export function Icon({ name }: { name: keyof typeof paths }) {

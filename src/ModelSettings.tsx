@@ -246,9 +246,11 @@ function ProviderFields({
 
 export function ModelSettings({
   value,
+  configured,
   onSave,
 }: {
   value: ModelSettingsValue;
+  configured: boolean;
   onSave: (value: ModelSettingsValue) => void;
 }) {
   const modal = useRef<HTMLDialogElement>(null);
@@ -280,7 +282,7 @@ export function ModelSettings({
   return (
     <>
       <button type="button" className="settings-trigger" onClick={openSettings}>
-        模型设置
+        {configured ? "模型设置" : "配置模型"}
       </button>
       <dialog
         ref={modal}

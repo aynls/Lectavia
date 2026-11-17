@@ -3,8 +3,11 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Icon } from "./Icon";
 import { inspectMedia, type MediaInfo } from "./media";
-import { defaultModelSettings, ModelSettings } from "./ModelSettings";
-import { validateModelConnection } from "./models";
+import {
+  defaultModelSettings,
+  ModelSettings,
+  type ModelSettingsValue,
+} from "./ModelSettings";
 import { TaskList } from "./TaskList";
 import { TaskQueue } from "./tasks";
 import { parseVideoLink, type VideoSource } from "./video-source";
@@ -28,9 +31,25 @@ export default function App() {
   const [folder, setFolder] = useState("");
   const [format, setFormat] = useState<"md" | "txt">("md");
   const [prompt, setPrompt] = useState<PromptFile | null>(null);
-  const [settings, setSettings] = useState(defaultModelSettings);
+  const [settings, setSettings] = useState<ModelSettingsValue | null>(null);
+  const [justQueued, setJustQueued] = useState(false);
+  const linkInput = useRef<HTMLInputElement>(null);
   const requestId = useRef(0);
   const previewKey = useRef("");
+  const selected = new Set(selectedParts);
+  const nextStep = justQueued
+    ? "已加入队列，可以继续添加视频。"
+    : previewing
+      ? ""
+      : !media
+        ? "添加视频后即可开始。"
+        : selected.size === 0
+          ? "请至少选择一个分 P。"
+          : !folder
+            ? "请选择资料的保存目录。"
+            : !settings
+              ? "请先在右上角配置模型。"
+              : "";
 
   function clearPreview() {
     requestId.current += 1;
@@ -47,6 +66,7 @@ export default function App() {
 
     clearPreview();
     setFormError("");
+    setJustQueued(false);
     const id = requestId.current;
     previewKey.current = key;
     setPreviewing(true);
@@ -107,64 +127,49 @@ export default function App() {
   }
 
   async function chooseFolder() {
+    setFormError("");
     try {
       const path = await open({
         title: "选择输出目录",
         directory: true,
         multiple: false,
       });
-      if (path) {
-        setFolder(path);
-        setFormError("");
-      }
+      if (path) setFolder(path);
     } catch {
       setFormError("无法打开目录选择窗口。");
     }
   }
 
   async function choosePrompt() {
+    setFormError("");
     try {
       const file = await invoke<PromptFile | null>("choose_prompt_file");
-      if (file) {
-        setPrompt(file);
-        setFormError("");
-      }
+      if (file) setPrompt(file);
     } catch (error) {
       setFormError(String(error instanceof Error ? error.message : error));
     }
   }
 
-  function generate() {
-    if (!media || selectedParts.length === 0) {
-      setFormError("请先读取视频并选择要处理的分 P。");
-      return;
-    }
-    if (!folder) {
-      setFormError("请选择输出目录。");
-      return;
-    }
+  function removeVideo() {
+    setLink("");
+    clearPreview();
+    linkInput.current?.focus();
+  }
 
-    const { asr, llm } = settings;
-    try {
-      validateModelConnection(asr);
-      validateModelConnection(llm);
-    } catch {
-      setFormError("请先在模型设置中填写有效的转写和整理模型。");
-      return;
-    }
+  function generate() {
+    if (!media || !selected.size || !folder || !settings) return;
 
     setFormError("");
     queue.enqueue({
       media,
-      parts: media.parts.filter((part) => selectedParts.includes(part.id)),
+      parts: media.parts.filter((part) => selected.has(part.id)),
       outputDirectory: folder,
       format,
       instructions: prompt?.content,
-      asr,
-      llm,
+      ...settings,
     });
-    setLink("");
-    clearPreview();
+    removeVideo();
+    setJustQueued(true);
   }
 
   return (
@@ -178,7 +183,8 @@ export default function App() {
             Lectavia
           </div>
           <ModelSettings
-            value={settings}
+            value={settings ?? defaultModelSettings}
+            configured={settings !== null}
             onSave={(next) => {
               setSettings(next);
               setFormError("");
@@ -204,7 +210,7 @@ export default function App() {
                 <Icon name="video" />
                 视频来源
               </h2>
-              <form onSubmit={submitLink}>
+              <form onSubmit={submitLink} noValidate>
                 <label className="sr-only" htmlFor="video-url">
                   视频链接
                 </label>
@@ -212,6 +218,7 @@ export default function App() {
                   <div className="link-field">
                     <Icon name="link" />
                     <input
+                      ref={linkInput}
                       id="video-url"
                       name="video-url"
                       type="url"
@@ -221,15 +228,23 @@ export default function App() {
                       placeholder="粘贴视频链接"
                       value={link}
                       disabled={!desktop}
+                      aria-invalid={Boolean(link && sourceError)}
+                      aria-describedby={
+                        link && sourceError ? "source-error" : undefined
+                      }
                       onBlur={() => previewLink(link)}
                       onChange={(event) => {
                         setLink(event.target.value);
                         clearPreview();
+                        setJustQueued(false);
                       }}
                     />
                   </div>
-                  <button type="submit" disabled={!desktop || !link.trim()}>
-                    读取链接
+                  <button
+                    type="submit"
+                    disabled={!desktop || !link.trim() || previewing}
+                  >
+                    {previewing && link ? "读取中…" : "读取链接"}
                   </button>
                 </div>
               </form>
@@ -243,17 +258,17 @@ export default function App() {
                 选择本地视频
               </button>
               {previewing && (
-                <p className="muted" role="status">
+                <p className="source-status muted" role="status">
                   正在读取视频信息…
                 </p>
               )}
               {sourceError && (
-                <p className="error" role="alert">
+                <p id="source-error" className="error" role="alert">
                   {sourceError}
                 </p>
               )}
               {media && (
-                <div className="media enter">
+                <div className="media enter" key={previewKey.current}>
                   <div className="media-heading">
                     {media.thumbnail && (
                       <img
@@ -262,34 +277,70 @@ export default function App() {
                         referrerPolicy="no-referrer"
                       />
                     )}
-                    <div>
+                    {!media.thumbnail && (
+                      <span className="media-fallback">
+                        <Icon name="video" />
+                      </span>
+                    )}
+                    <div className="media-title">
                       <h3>{media.title}</h3>
                       {media.uploader && (
                         <p className="muted">{media.uploader}</p>
                       )}
                     </div>
+                    <button
+                      type="button"
+                      className="quiet icon-button"
+                      aria-label="移除视频"
+                      title="移除视频"
+                      onClick={removeVideo}
+                    >
+                      <Icon name="close" />
+                    </button>
                   </div>
                   {media.multipart && (
                     <fieldset className="parts">
                       <legend>选择分 P</legend>
-                      {media.parts.map((part) => (
-                        <label className="checkbox" key={part.id}>
-                          <input
-                            type="checkbox"
-                            checked={selectedParts.includes(part.id)}
-                            onChange={(event) => {
-                              const checked = event.target.checked;
-                              setSelectedParts((current) =>
-                                checked
-                                  ? [...current, part.id]
-                                  : current.filter((id) => id !== part.id),
-                              );
-                            }}
-                          />
-                          {part.number ? `P${part.number} · ` : ""}
-                          {part.title}
-                        </label>
-                      ))}
+                      <div className="parts-heading">
+                        <p className="muted" role="status">
+                          已选 {selected.size} / {media.parts.length} 集
+                        </p>
+                        <button
+                          type="button"
+                          className="quiet"
+                          onClick={() =>
+                            setSelectedParts(
+                              selected.size === media.parts.length
+                                ? []
+                                : media.parts.map((part) => part.id),
+                            )
+                          }
+                        >
+                          {selected.size === media.parts.length
+                            ? "取消全选"
+                            : "全选"}
+                        </button>
+                      </div>
+                      <div className="parts-list">
+                        {media.parts.map((part) => (
+                          <label className="checkbox" key={part.id}>
+                            <input
+                              type="checkbox"
+                              checked={selected.has(part.id)}
+                              onChange={(event) => {
+                                const checked = event.target.checked;
+                                setSelectedParts((current) =>
+                                  checked
+                                    ? [...current, part.id]
+                                    : current.filter((id) => id !== part.id),
+                                );
+                              }}
+                            />
+                            {part.number ? `P${part.number} · ` : ""}
+                            {part.title}
+                          </label>
+                        ))}
+                      </div>
                     </fieldset>
                   )}
                 </div>
@@ -338,14 +389,12 @@ export default function App() {
               <details className="advanced">
                 <summary>
                   <Icon name="down" />
-                  自定义整理要求 <small>可选</small>
+                  自定义整理要求
+                  <small className="advanced-selection" title={prompt?.name}>
+                    {prompt?.name ?? "可选"}
+                  </small>
                 </summary>
                 <div className="advanced-content">
-                  {prompt && (
-                    <p className="file-path" title={prompt.name}>
-                      {prompt.name}
-                    </p>
-                  )}
                   <div className="actions">
                     <button
                       type="button"
@@ -373,10 +422,21 @@ export default function App() {
                   {formError}
                 </p>
               )}
+              <p id="next-step" className="muted next-step" role="status">
+                {desktop ? nextStep : ""}
+              </p>
               <button
                 type="button"
                 className="primary generate"
-                disabled={!desktop || previewing}
+                disabled={
+                  !desktop ||
+                  previewing ||
+                  !media ||
+                  !selected.size ||
+                  !folder ||
+                  !settings
+                }
+                aria-describedby="next-step"
                 onClick={generate}
               >
                 生成学习资料
