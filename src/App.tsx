@@ -27,6 +27,7 @@ import {
   type InstructionPreset,
 } from "./instruction-presets";
 import { InstructionPresetSettings } from "./InstructionPresetSettings";
+import { InstructionsField } from "./InstructionsField";
 import { inspectMedia, partLabel, type MediaInfo } from "./media";
 import {
   defaultModelSettings,
@@ -803,95 +804,23 @@ export default function App({
                   {t("output.settings")}
                 </h2>
                 <div className="output-fields">
-                  <div className="instructions-field">
-                    <div className="field-label-row">
-                      {prompt ? (
-                        <span className="option-label">
-                          {t("output.instructions")}
-                        </span>
-                      ) : (
-                        <label htmlFor="custom-instructions">
-                          {t("output.instructions")}
-                        </label>
-                      )}
-                      <span className="instruction-optional">
-                        {t("output.optional")}
-                      </span>
-                    </div>
-                    <div className="preset-controls">
-                      <label htmlFor="instruction-preset" className="sr-only">
-                        {t("output.presets")}
-                      </label>
-                      <select
-                        name="instruction-preset"
-                        id="instruction-preset"
-                        value={presetId}
-                        disabled={presets.length === 0}
-                        onChange={(event) => {
-                          setPresetId(event.target.value);
-                          setInstructionsError(undefined);
-                        }}
-                      >
-                        <option value="">{t("output.choosePreset")}</option>
-                        {presets.map((entry) => (
-                          <option key={entry.id} value={entry.id}>
-                            {entry.name}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        className="save-preset"
-                        disabled={!canSavePreset}
-                        onClick={savePreset}
-                      >
-                        <Icon name="save" />
-                        {t("output.savePreset")}
-                      </button>
-                    </div>
-                    {prompt ? (
-                      <div className="prompt-file">
-                        <Icon name="document" />
-                        <span title={prompt.name}>{prompt.name}</span>
-                        <button
-                          type="button"
-                          className="quiet icon-button"
-                          aria-label={t("common.removeFile", {
-                            name: prompt.name,
-                          })}
-                          onClick={removePrompt}
-                        >
-                          <Icon name="close" />
-                        </button>
-                      </div>
-                    ) : (
-                      <textarea
-                        id="custom-instructions"
-                        rows={4}
-                        value={instructions}
-                        placeholder={t("output.placeholder")}
-                        onChange={(event) =>
-                          changeInstructions(event.target.value)
-                        }
-                      />
-                    )}
-                    <div className="prompt-import">
-                      <button
-                        type="button"
-                        className="quiet import-prompt"
-                        onClick={choosePrompt}
-                        disabled={!desktop}
-                      >
-                        <Icon name="upload" />
-                        {t(prompt ? "output.replace" : "output.import")}
-                      </button>
-                    </div>
-                    {instructionsError && (
-                      <p className="error field-error" role="alert">
-                        {renderMessage(t, instructionsError)}
-                      </p>
-                    )}
-                  </div>
+                  <InstructionsField
+                    presets={presets}
+                    presetId={presetId}
+                    instructions={instructions}
+                    prompt={prompt}
+                    error={instructionsError}
+                    canSavePreset={canSavePreset}
+                    canImport={desktop}
+                    onSelectPreset={(id) => {
+                      setPresetId(id);
+                      setInstructionsError(undefined);
+                    }}
+                    onChange={changeInstructions}
+                    onSavePreset={savePreset}
+                    onImport={choosePrompt}
+                    onRemovePrompt={removePrompt}
+                  />
                   <div className="options">
                     <div
                       className="option"

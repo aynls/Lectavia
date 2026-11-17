@@ -843,45 +843,15 @@ legend {
   min-width: 0;
 }
 
-.field-label-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.instruction-optional {
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-
 .instructions-field textarea {
   display: block;
   flex: 1 0 auto;
   width: 100%;
   min-height: 7.25rem;
-  resize: none;
+  resize: vertical;
   border-color: var(--line);
   background: var(--surface-subtle);
   line-height: 1.65;
-}
-
-.preset-controls {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.preset-controls select {
-  min-width: 0;
-  width: 100%;
-}
-
-.preset-controls .save-preset {
-  min-height: 2.5rem;
-  padding-inline: 0.65rem;
-  font-size: 0.8rem;
 }
 
 .prompt-import {
@@ -1523,10 +1493,6 @@ button.preset-delete:is(:hover, :focus-visible):not(:disabled) {
   .composer-body {
     overflow: visible;
   }
-
-  .instructions-field textarea {
-    resize: vertical;
-  }
 }
 
 @media (max-width: 37.5rem) {
@@ -1598,14 +1564,6 @@ button.preset-delete:is(:hover, :focus-visible):not(:disabled) {
 
   .local-picker-copy small {
     font-size: 0.68rem;
-  }
-
-  .preset-controls {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .preset-controls .save-preset {
-    justify-self: start;
   }
 }
 

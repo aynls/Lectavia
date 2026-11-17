@@ -45,10 +45,14 @@ export default {
   "media.partLabel": "P{{number}} · {{title}}",
   "output.settings": "Document settings",
   "output.presets": "Instruction presets",
-  "output.choosePreset": "Choose a preset",
+  "output.choosePreset": "No preset",
   "output.savePreset": "Save as preset",
   "output.instructions": "Organization instructions",
-  "output.optional": "Optional",
+  "output.defaultInstructions": "Default instructions",
+  "output.customInstructions": "Custom instructions",
+  "output.perTaskInstructions": "Edits become custom instructions.",
+  "output.importedInstructions":
+    "Using the file contents from when it was imported. Edits become custom instructions.",
   "output.placeholder":
     "For example, group by topic, keep key terms, and add review questions at the end.",
   "output.import": "Import Markdown file",

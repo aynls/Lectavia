@@ -45,10 +45,15 @@ export default {
   "media.partLabel": "P{{number}} · {{title}}",
   "output.settings": "原稿設定",
   "output.presets": "整理指示のプリセット",
-  "output.choosePreset": "プリセットを選択",
+  "output.choosePreset": "プリセットを使用しない",
   "output.savePreset": "プリセットに保存",
   "output.instructions": "原稿の整理指示",
-  "output.optional": "任意",
+  "output.defaultInstructions": "既定の整理",
+  "output.customInstructions": "カスタム",
+  "output.perTaskInstructions":
+    "編集した内容はカスタム指示として使用されます。",
+  "output.importedInstructions":
+    "読み込み時のファイル内容を使用しています。編集した内容はカスタム指示として使用されます。",
   "output.placeholder":
     "例：テーマごとに分け、重要な用語を残し、末尾に復習用の質問をまとめてください。",
   "output.import": "Markdown ファイルを読み込む",
