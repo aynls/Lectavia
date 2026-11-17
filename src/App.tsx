@@ -463,6 +463,7 @@ export default function App({
             <label className="language-picker">
               <span className="sr-only">{t("common.language")}</span>
               <select
+                name="language"
                 value={locale}
                 onChange={(event) => {
                   const value = event.target.value;
@@ -788,6 +789,7 @@ export default function App({
                 <div className="option">
                   <label htmlFor="output-format">{t("output.format")}</label>
                   <select
+                    name="output-format"
                     id="output-format"
                     value={format}
                     onChange={(event) =>
@@ -819,6 +821,7 @@ export default function App({
                     {t("output.presets")}
                   </label>
                   <select
+                    name="instruction-preset"
                     id="instruction-preset"
                     value={presetId}
                     disabled={presets.length === 0}
