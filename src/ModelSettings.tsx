@@ -1,11 +1,9 @@
 import {
   useId,
   useEffect,
-  useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
-  type Ref,
   type SubmitEvent,
 } from "react";
 import { isTauri } from "@tauri-apps/api/core";
@@ -32,16 +30,6 @@ import {
 export interface ModelSettingsValue {
   asr: ModelConnection;
   llm: ModelConnection;
-}
-
-interface ModelSettingsOpenOptions {
-  purpose?: ModelPurpose;
-  saveAndRetry?: boolean;
-  onSaved?: (value: ModelSettingsValue) => void;
-}
-
-export interface ModelSettingsHandle {
-  open: (options?: ModelSettingsOpenOptions) => void;
 }
 
 interface ModelSettingsFocus {
@@ -74,7 +62,7 @@ function firstInvalidSetting(
   }
 }
 
-export const defaultModelSettings: ModelSettingsValue = {
+const defaultModelSettings: ModelSettingsValue = {
   asr: {
     baseUrl: OPENROUTER_BASE_URL,
     apiKey: "",
@@ -104,38 +92,35 @@ function ReasoningField({
   const { t } = useTranslation();
   const id = useId();
   const selectedEffort = efforts.includes(effort) ? effort : "";
-  const defaultLabel = defaultEffort
-    ? t("model.namedDefaultEffort", { effort: defaultEffort })
-    : t("model.defaultEffort");
 
   return (
-    <details className="settings-advanced">
-      <summary>
-        <Icon name="down" />
-        {t("model.effort")}
-        <small className="advanced-selection" title={selectedEffort}>
-          {selectedEffort || t("model.defaultEffort")}
-        </small>
-      </summary>
-      <div className="advanced-content">
-        <label htmlFor={id}>{t("model.effort")}</label>
-        <select
-          id={id}
-          value={selectedEffort}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          <option value="">{defaultLabel}</option>
-          {efforts.map((level) => (
-            <option key={level} value={level}>
-              {level}
-            </option>
-          ))}
-        </select>
-        {efforts.length === 0 && (
-          <p className="muted settings-hint">{t("model.noEfforts")}</p>
-        )}
-      </div>
-    </details>
+    <div className="settings-model-field settings-model-effort">
+      <label htmlFor={id}>{t("model.effort")}</label>
+      <select
+        id={id}
+        name={id}
+        disabled={efforts.length === 0}
+        aria-describedby={efforts.length === 0 ? `${id}-hint` : undefined}
+        value={selectedEffort}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">
+          {defaultEffort
+            ? t("model.namedDefaultEffort", { effort: defaultEffort })
+            : t("model.defaultEffort")}
+        </option>
+        {efforts.map((level) => (
+          <option key={level} value={level}>
+            {level}
+          </option>
+        ))}
+      </select>
+      {efforts.length === 0 && (
+        <p id={`${id}-hint`} className="muted settings-model-note">
+          {t("model.noEfforts")}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -174,9 +159,20 @@ function ProviderFields({
       ? lookup
       : undefined;
   const models = catalog?.models ?? [];
-  const selected = models.find((model) => model.id === connection.model.trim());
-  const useManualModel = manualModel || !selected;
+  const modelId = connection.model.trim();
+  const showCatalog = models.length > 0 && !manualModel;
+  const selectedModel = showCatalog
+    ? models.find((model) => model.id === modelId)
+    : undefined;
+  const hasModelName = selectedModel && selectedModel.name !== modelId;
   const loading = Boolean(catalog && !catalog.error && !catalog.models);
+  const catalogAction = t(
+    loading
+      ? "model.fetching"
+      : manualModel && models.length
+        ? "model.select"
+        : "model.fetch",
+  );
 
   function editEndpoint(field: "baseUrl" | "apiKey", value: string) {
     const providerChanged =
@@ -280,121 +276,192 @@ function ProviderFields({
   }
 
   return (
-    <fieldset className="settings-fields" data-model-purpose={purpose}>
-      <legend>{t(`model.purpose.${purpose}`)}</legend>
-      <label htmlFor={id + "-url"}>{t("model.baseUrl")}</label>
-      <input
-        id={id + "-url"}
-        name={id + "-url"}
-        type="url"
-        value={connection.baseUrl}
-        required
-        spellCheck={false}
-        {...inputState("baseUrl")}
-        onChange={(event) => editEndpoint("baseUrl", event.target.value)}
-      />
-      {renderFieldError("baseUrl")}
-      <label htmlFor={id + "-key"}>{t("model.apiKey")}</label>
-      <input
-        id={id + "-key"}
-        name={id + "-key"}
-        type="password"
-        autoComplete="off"
-        value={connection.apiKey}
-        required
-        {...inputState("apiKey")}
-        onChange={(event) => editEndpoint("apiKey", event.target.value)}
-      />
-      {renderFieldError("apiKey")}
-      {models.length > 0 && (
-        <>
-          <label htmlFor={id + "-catalog"}>{t("model.select")}</label>
-          <select
-            id={id + "-catalog"}
-            name={id + "-catalog"}
-            value={!useManualModel && selected ? selected.id : ""}
-            onChange={(event) => {
-              const model = event.target.value;
-              setManualModel(!model);
-              if (model) editModel(model);
-            }}
-          >
-            <option value="">{t("model.manualId")}</option>
-            {models.map(({ id, name }) => (
-              <option key={id} value={id}>
-                {name === id ? id : `${name} · ${id}`}
-              </option>
-            ))}
-          </select>
-        </>
-      )}
-      {useManualModel && (
-        <>
-          <label htmlFor={id + "-model"}>{t("model.id")}</label>
+    <div
+      className="settings-model-group"
+      role="group"
+      aria-labelledby={id + "-purpose"}
+      data-model-purpose={purpose}
+    >
+      <h4 id={id + "-purpose"}>{t(`model.purpose.${purpose}`)}</h4>
+      <div className="settings-model-endpoint">
+        <div className="settings-model-field">
+          <label htmlFor={id + "-url"}>{t("model.baseUrl")}</label>
           <input
-            id={id + "-model"}
-            name={id + "-model"}
-            value={connection.model}
+            id={id + "-url"}
+            name={id + "-url"}
+            type="url"
+            value={connection.baseUrl}
             required
-            placeholder={t("model.idPlaceholder")}
+            autoCapitalize="none"
+            autoCorrect="off"
             spellCheck={false}
-            {...inputState("model")}
-            onChange={(event) => editModel(event.target.value)}
+            {...inputState("baseUrl")}
+            onChange={(event) => editEndpoint("baseUrl", event.target.value)}
           />
-          {renderFieldError("model")}
-        </>
-      )}
-      <div className="settings-catalog">
-        <button
-          type="button"
-          className="quiet"
-          disabled={loading}
-          onClick={fetchModels}
-        >
-          {t(loading ? "model.fetching" : "model.fetch")}
-        </button>
-        <p className={catalog?.error ? "error" : "muted"} role="status">
-          {catalog?.error
-            ? renderMessage(t, catalog.error)
-            : catalog?.models &&
-              (models.length
-                ? t("model.found", { count: models.length })
-                : t("model.noModels"))}
-        </p>
+          {renderFieldError("baseUrl")}
+        </div>
+        <div className="settings-model-field">
+          <label htmlFor={id + "-key"}>{t("model.apiKey")}</label>
+          <input
+            id={id + "-key"}
+            name={id + "-key"}
+            type="password"
+            autoComplete="off"
+            value={connection.apiKey}
+            required
+            {...inputState("apiKey")}
+            onChange={(event) => editEndpoint("apiKey", event.target.value)}
+          />
+          {renderFieldError("apiKey")}
+        </div>
       </div>
-      {purpose === "llm" && connection.model.trim() && (
-        <ReasoningField
-          key={connection.model.trim()}
-          efforts={connection.reasoningEfforts ?? []}
-          defaultEffort={connection.defaultEffort}
-          effort={connection.reasoningEffort ?? ""}
-          onChange={(reasoningEffort) =>
-            setConnection({ ...connection, reasoningEffort })
-          }
-        />
-      )}
-    </fieldset>
+      <div className="settings-model-choices">
+        <div className="settings-model-field">
+          <label htmlFor={id + "-model"}>
+            {t(showCatalog ? "model.label" : "model.id")}
+          </label>
+          <div className="settings-model-picker">
+            {showCatalog ? (
+              <select
+                className="settings-model-select"
+                id={id + "-model"}
+                name={id + "-model"}
+                required
+                value={modelId ? `model:${modelId}` : ""}
+                {...inputState("model")}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (value === "manual") {
+                    setManualModel(true);
+                  } else {
+                    editModel(value.slice("model:".length));
+                  }
+                }}
+              >
+                <button type="button">
+                  {selectedModel?.name ?? (modelId || t("model.select"))}
+                </button>
+                <option value="" disabled>
+                  {t("model.select")}
+                </option>
+                {modelId && !selectedModel && (
+                  <option value={`model:${modelId}`}>{modelId}</option>
+                )}
+                {models.map(({ id, name }) => (
+                  <option key={id} value={`model:${id}`}>
+                    <span>
+                      {name}
+                      {name !== id && (
+                        <>
+                          {" "}
+                          <span className="settings-model-option-id">{id}</span>
+                        </>
+                      )}
+                    </span>
+                  </option>
+                ))}
+                <option value="manual">{t("model.manualId")}</option>
+              </select>
+            ) : (
+              <input
+                id={id + "-model"}
+                name={id + "-model"}
+                value={connection.model}
+                autoFocus={manualModel && models.length > 0}
+                required
+                placeholder={t("model.idPlaceholder")}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                {...inputState("model")}
+                onChange={(event) => editModel(event.target.value)}
+              />
+            )}
+            <button
+              type="button"
+              className="settings-model-list"
+              disabled={loading}
+              onClick={() => {
+                if (manualModel && models.length) {
+                  setManualModel(false);
+                } else {
+                  void fetchModels();
+                }
+              }}
+            >
+              <Icon name="list" />
+              {catalogAction}
+            </button>
+          </div>
+          {renderFieldError("model")}
+          <div className="settings-model-meta">
+            {hasModelName && (
+              <p className="muted settings-model-note">{modelId}</p>
+            )}
+            <p
+              className={`settings-model-note ${catalog?.error ? "error" : "muted"}`}
+              role="status"
+            >
+              {catalog?.error
+                ? renderMessage(t, catalog.error)
+                : catalog?.models &&
+                  (models.length
+                    ? t("model.found", { count: models.length })
+                    : t("model.noModels"))}
+            </p>
+          </div>
+        </div>
+        {purpose === "llm" && (
+          <ReasoningField
+            efforts={connection.reasoningEfforts ?? []}
+            defaultEffort={connection.defaultEffort}
+            effort={connection.reasoningEffort ?? ""}
+            onChange={(reasoningEffort) =>
+              setConnection({ ...connection, reasoningEffort })
+            }
+          />
+        )}
+      </div>
+    </div>
   );
 }
 
 export function ModelSettings({
-  ref,
   value,
+  saving,
+  focusOnOpen,
+  purpose,
+  retryAfterSave,
   onSave,
+  onSaved,
+  onCancel,
 }: {
-  ref?: Ref<ModelSettingsHandle>;
-  value: ModelSettingsValue;
+  value: ModelSettingsValue | null;
+  saving: boolean;
+  focusOnOpen: boolean;
+  purpose?: ModelPurpose;
+  retryAfterSave: boolean;
   onSave: (value: ModelSettingsValue) => Promise<void>;
+  onSaved?: (value: ModelSettingsValue) => void;
+  onCancel?: () => void;
 }) {
   const { t } = useTranslation();
-  const modal = useRef<HTMLDialogElement>(null);
-  const savedCallback = useRef<ModelSettingsOpenOptions["onSaved"]>(undefined);
-  const [draft, setDraft] = useState(value);
+  const form = useRef<HTMLFormElement>(null);
+  const savedValue = value ?? defaultModelSettings;
+  const [draft, setDraft] = useState(savedValue);
   const [error, setError] = useState<Message>();
   const [validation, setValidation] = useState<SettingsErrors>();
-  const [focus, setFocus] = useState<ModelSettingsFocus>();
-  const [saving, setSaving] = useState(false);
-  const [saveAndRetry, setSaveAndRetry] = useState(false);
+  const [focus, setFocus] = useState<ModelSettingsFocus | undefined>(() => {
+    if (!focusOnOpen) return;
+    const errors = validateSettings(savedValue);
+    if (purpose) {
+      return {
+        purpose,
+        field: firstInvalidField(errors[purpose]) ?? "baseUrl",
+      };
+    }
+    return firstInvalidSetting(errors) ?? { purpose: "asr", field: "baseUrl" };
+  });
   const [session, setSession] = useState(0);
   const [loadingModels, setLoadingModels] = useState<
     Record<ModelPurpose, boolean>
@@ -402,41 +469,17 @@ export function ModelSettings({
     asr: false,
     llm: false,
   });
+  const loading = loadingModels.asr || loadingModels.llm;
 
   useLayoutEffect(() => {
-    if (!focus || !modal.current?.open) return;
+    if (!focus) return;
     const { purpose, field } = focus;
-    modal.current
-      .querySelector<HTMLInputElement>(
+    form.current
+      ?.querySelector<HTMLElement>(
         `[data-model-purpose="${purpose}"] [data-model-field="${field}"]`,
       )
       ?.focus();
   }, [focus]);
-
-  function openSettings(options: ModelSettingsOpenOptions = {}) {
-    const dialog = modal.current;
-    if (!dialog || dialog.open) return;
-
-    const errors = validateSettings(value);
-    setSession((current) => current + 1);
-    setLoadingModels({ asr: false, llm: false });
-    setSaveAndRetry(Boolean(options.saveAndRetry));
-    setDraft(value);
-    setError(undefined);
-    setValidation(undefined);
-    setFocus(
-      options.purpose
-        ? {
-            purpose: options.purpose,
-            field: firstInvalidField(errors[options.purpose]) ?? "baseUrl",
-          }
-        : (firstInvalidSetting(errors) ?? { purpose: "asr", field: "baseUrl" }),
-    );
-    savedCallback.current = options.onSaved;
-    dialog.showModal();
-  }
-
-  useImperativeHandle(ref, () => ({ open: openSettings }));
 
   function updateDraft(
     purpose: ModelPurpose,
@@ -455,9 +498,21 @@ export function ModelSettings({
     }
   }
 
+  function cancelEditing() {
+    if (onCancel) {
+      onCancel();
+      return;
+    }
+    setDraft(savedValue);
+    setValidation(undefined);
+    setError(undefined);
+    setSession((current) => current + 1);
+    setLoadingModels({ asr: false, llm: false });
+  }
+
   async function saveSettings(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (saving || loadingModels.asr || loadingModels.llm) return;
+    if (saving || loading) return;
 
     const errors = validateSettings(draft);
     const invalidField = firstInvalidSetting(errors);
@@ -479,7 +534,7 @@ export function ModelSettings({
           : undefined,
       },
     };
-    setSaving(true);
+    setError(undefined);
     try {
       await onSave(next);
     } catch (error) {
@@ -490,52 +545,38 @@ export function ModelSettings({
         ]),
       );
       return;
-    } finally {
-      setSaving(false);
     }
-    const onSaved = savedCallback.current;
-    savedCallback.current = undefined;
-    modal.current?.close();
+
+    setDraft(next);
+    setValidation(undefined);
     onSaved?.(next);
   }
 
   return (
-    <dialog
-      ref={modal}
-      className="settings-dialog"
-      aria-labelledby="settings-title"
-      aria-describedby="settings-description"
-      onCancel={(event) => {
-        if (saving) event.preventDefault();
-      }}
-      onClose={(event) => {
-        if (!event.currentTarget.open) savedCallback.current = undefined;
-      }}
+    <section
+      className="settings-panel settings-section"
+      aria-labelledby="model-settings-title"
     >
       <form
-        className="settings-form"
+        ref={form}
+        aria-labelledby="model-settings-title"
+        method="post"
         noValidate
         onSubmit={saveSettings}
         onChange={() => setError(undefined)}
       >
         <header className="settings-header">
           <div>
-            <h2 id="settings-title">{t("model.title")}</h2>
-            <p id="settings-description" className="muted">
+            <h3 id="model-settings-title">{t("model.title")}</h3>
+            <p className="muted">
               {t(isTauri() ? "model.savedKey" : "model.sessionKey")}
             </p>
           </div>
-          <button
-            type="button"
-            className="quiet icon-button"
-            aria-label={t("model.close")}
-            disabled={saving}
-            onClick={() => modal.current?.close()}
-          >
-            <Icon name="close" />
-          </button>
         </header>
-        <fieldset className="settings-body" disabled={saving}>
+        <fieldset
+          className="settings-body settings-model-body"
+          disabled={saving}
+        >
           {modelPurposes.map((purpose) => (
             <ProviderFields
               key={`${purpose}-${session}`}
@@ -561,22 +602,22 @@ export function ModelSettings({
             </p>
           )}
           <div className="actions settings-actions">
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => modal.current?.close()}
-            >
+            <p className="muted settings-status" role="status">
+              {draft === savedValue &&
+                t(value ? "model.configured" : "model.notConfigured")}
+            </p>
+            <button type="button" disabled={saving} onClick={cancelEditing}>
               {t("common.cancel")}
             </button>
             <button
               type="submit"
               className="primary"
-              disabled={saving || loadingModels.asr || loadingModels.llm}
+              disabled={saving || loading}
             >
               {t(
                 saving
                   ? "model.saving"
-                  : saveAndRetry
+                  : retryAfterSave
                     ? "model.saveAndRetry"
                     : "model.save",
               )}
@@ -584,6 +625,6 @@ export function ModelSettings({
           </div>
         </div>
       </form>
-    </dialog>
+    </section>
   );
 }

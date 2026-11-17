@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ClipboardEvent,
@@ -28,12 +29,8 @@ import {
 } from "./InstructionPresetSettings";
 import { InstructionsField } from "./InstructionsField";
 import { inspectMedia, partLabel, type MediaInfo } from "./media";
-import {
-  defaultModelSettings,
-  ModelSettings,
-  type ModelSettingsHandle,
-  type ModelSettingsValue,
-} from "./ModelSettings";
+import { ModelSettings, type ModelSettingsValue } from "./ModelSettings";
+import type { ModelPurpose } from "./models";
 import { outputLanguages, type OutputLanguage } from "./output-language";
 import { SettingsPage } from "./SettingsPage";
 import { TaskList } from "./TaskList";
@@ -51,6 +48,14 @@ import "./App.css";
 
 type SourceMode = "link" | "local";
 type FolderStatus = "unselected" | "checking" | "ready" | "error";
+
+type SettingsEntry =
+  | { kind: "general" }
+  | {
+      kind: "models";
+      purpose?: ModelPurpose;
+      onRetry?: (value: ModelSettingsValue) => void;
+    };
 
 const desktop = isTauri();
 const FOLDER_STORAGE_KEY = "lectavia.output-directory";
@@ -124,10 +129,11 @@ export default function App({
   const [presetId, setPresetId] = useState("");
   const [instructionsError, setInstructionsError] = useState<Message>();
   const [settings, setSettings] = useState(initialSettings);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsEntry, setSettingsEntry] = useState<SettingsEntry>();
+  const [savingModels, setSavingModels] = useState(false);
   const [queueing, setQueueing] = useState(false);
   const composer = useRef<HTMLElement>(null);
-  const modelSettings = useRef<ModelSettingsHandle>(null);
+  const returnFocus = useRef<() => void>(undefined);
   const presetSettings = useRef<InstructionPresetSettingsHandle>(null);
   const restoreDialog = useRef<HTMLDialogElement>(null);
   const pendingRestoreId = useRef("");
@@ -135,6 +141,9 @@ export default function App({
   const linkInput = useRef<HTMLInputElement>(null);
   const requestId = useRef(0);
   const previewKey = useRef("");
+  const settingsOpen = settingsEntry !== undefined;
+  const modelEntry =
+    settingsEntry?.kind === "models" ? settingsEntry : undefined;
   const preset = presets.find((entry) => entry.id === presetId);
   const prompt = preset ? preset.prompt : importedPrompt;
   const instructions = prompt
@@ -182,6 +191,13 @@ export default function App({
           steps: new Intl.ListFormat(locale).format(missing),
         })
       : undefined;
+
+  useLayoutEffect(() => {
+    if (settingsOpen) return;
+    const focus = returnFocus.current;
+    returnFocus.current = undefined;
+    focus?.();
+  }, [settingsOpen]);
 
   useEffect(() => {
     if (!desktop) return;
@@ -408,6 +424,15 @@ export default function App({
     setPresetId((id) => (next.some((entry) => entry.id === id) ? id : ""));
   }
 
+  function openSettings(entry: SettingsEntry, focus: () => void) {
+    returnFocus.current = focus;
+    setSettingsEntry(entry);
+  }
+
+  function closeSettings() {
+    setSettingsEntry(undefined);
+  }
+
   function savePreset(focusEditor: () => void) {
     if (!canSavePreset) return;
     setInstructionsError(undefined);
@@ -415,6 +440,19 @@ export default function App({
       setPresetId(id);
       focusEditor();
     });
+  }
+
+  async function saveModelSettings(next: ModelSettingsValue) {
+    setSavingModels(true);
+    try {
+      if (desktop) {
+        await invoke("save_model_settings", { settings: next });
+      }
+      setSettings(next);
+      setFormError(undefined);
+    } finally {
+      setSavingModels(false);
+    }
   }
 
   function removeVideo() {
@@ -492,16 +530,19 @@ export default function App({
     onRetried: () => void,
   ) {
     if (action !== "outputDirectory") {
-      modelSettings.current?.open({
-        purpose: action,
-        saveAndRetry: true,
-        onSaved: (next) => {
-          const updates: TaskRetryUpdates = {};
-          if (task.recovery.includes("asr")) updates.asr = next.asr;
-          if (task.recovery.includes("llm")) updates.llm = next.llm;
-          if (queue.retry(task.id, updates)) onRetried();
+      openSettings(
+        {
+          kind: "models",
+          purpose: action,
+          onRetry: (next) => {
+            const updates: TaskRetryUpdates = {};
+            if (task.recovery.includes("asr")) updates.asr = next.asr;
+            if (task.recovery.includes("llm")) updates.llm = next.llm;
+            queue.retry(task.id, updates);
+          },
         },
-      });
+        onRetried,
+      );
       return;
     }
 
@@ -570,7 +611,15 @@ export default function App({
           <button
             type="button"
             className="settings-navigation"
-            onClick={() => setSettingsOpen(!settingsOpen)}
+            disabled={savingModels}
+            onClick={(event) => {
+              if (settingsOpen) {
+                closeSettings();
+              } else {
+                const button = event.currentTarget;
+                openSettings({ kind: "general" }, () => button.focus());
+              }
+            }}
           >
             <Icon name={settingsOpen ? "back" : "settings"} />
             {t(settingsOpen ? "settings.backToWorkspace" : "settings.title")}
@@ -579,12 +628,29 @@ export default function App({
       </header>
       {settingsOpen && (
         <SettingsPage
-          modelsConfigured={settings !== null}
+          focusTitle={settingsEntry.kind === "general"}
           initialMaxConcurrency={queue.maxConcurrency}
           onSaveMaxConcurrency={saveMaxConcurrency}
-          onOpenModels={() => modelSettings.current?.open()}
           onOpenPresets={() => presetSettings.current?.open()}
-        />
+        >
+          <ModelSettings
+            value={settings}
+            saving={savingModels}
+            focusOnOpen={Boolean(modelEntry)}
+            purpose={modelEntry?.purpose}
+            retryAfterSave={Boolean(modelEntry?.onRetry)}
+            onSave={saveModelSettings}
+            onSaved={
+              modelEntry
+                ? (next) => {
+                    modelEntry.onRetry?.(next);
+                    closeSettings();
+                  }
+                : undefined
+            }
+            onCancel={modelEntry ? closeSettings : undefined}
+          />
+        </SettingsPage>
       )}
       <main className="app-width app-main" hidden={settingsOpen}>
         {!desktop && <p className="notice">{t("workspace.desktopRequired")}</p>}
@@ -997,12 +1063,10 @@ export default function App({
                     <button
                       type="button"
                       className="quiet readiness-action"
-                      aria-haspopup="dialog"
                       onClick={() =>
-                        modelSettings.current?.open({
-                          onSaved: () =>
-                            composer.current?.focus({ preventScroll: true }),
-                        })
+                        openSettings({ kind: "models" }, () =>
+                          composer.current?.focus(),
+                        )
                       }
                     >
                       <Icon name="settings" />
@@ -1038,17 +1102,6 @@ export default function App({
         presets={presets}
         onChange={updatePresets}
         onPickFile={desktop ? pickPromptFile : undefined}
-      />
-      <ModelSettings
-        ref={modelSettings}
-        value={settings ?? defaultModelSettings}
-        onSave={async (next) => {
-          if (desktop) {
-            await invoke("save_model_settings", { settings: next });
-          }
-          setSettings(next);
-          setFormError(undefined);
-        }}
       />
       <dialog
         ref={restoreDialog}

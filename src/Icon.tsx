@@ -8,6 +8,7 @@ import { FilmStripIcon } from "@phosphor-icons/react/dist/csr/FilmStrip";
 import { FloppyDiskIcon } from "@phosphor-icons/react/dist/csr/FloppyDisk";
 import { FolderOpenIcon } from "@phosphor-icons/react/dist/csr/FolderOpen";
 import { LinkSimpleIcon } from "@phosphor-icons/react/dist/csr/LinkSimple";
+import { ListBulletsIcon } from "@phosphor-icons/react/dist/csr/ListBullets";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/csr/SlidersHorizontal";
 import { TextTIcon } from "@phosphor-icons/react/dist/csr/TextT";
@@ -24,6 +25,7 @@ const icons = {
   video: FilmStripIcon,
   folder: FolderOpenIcon,
   link: LinkSimpleIcon,
+  list: ListBulletsIcon,
   waveform: WaveformIcon,
   text: TextTIcon,
   document: FileTextIcon,

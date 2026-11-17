@@ -1,4 +1,4 @@
-import { useRef, useState, type SubmitEvent } from "react";
+import { useRef, useState, type ReactNode, type SubmitEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Icon } from "./Icon";
 import {
@@ -14,16 +14,16 @@ function focusHeading(heading: HTMLHeadingElement | null) {
 }
 
 export function SettingsPage({
-  modelsConfigured,
+  focusTitle,
   initialMaxConcurrency,
   onSaveMaxConcurrency,
-  onOpenModels,
+  children,
   onOpenPresets,
 }: {
-  modelsConfigured: boolean;
+  focusTitle: boolean;
   initialMaxConcurrency: number | null;
   onSaveMaxConcurrency: (limit: number | null) => void;
-  onOpenModels: () => void;
+  children: ReactNode;
   onOpenPresets: () => void;
 }) {
   const { t } = useTranslation();
@@ -54,7 +54,7 @@ export function SettingsPage({
   return (
     <main className="app-width app-main settings-page">
       <div className="settings-page-content">
-        <h2 tabIndex={-1} ref={focusHeading}>
+        <h2 tabIndex={-1} ref={focusTitle ? focusHeading : undefined}>
           {t("settings.title")}
         </h2>
         <div className="settings-panel">
@@ -129,28 +129,13 @@ export function SettingsPage({
             type="button"
             className="quiet settings-row"
             aria-haspopup="dialog"
-            onClick={onOpenModels}
-          >
-            <span className="settings-row-copy">
-              <strong>{t("model.title")}</strong>
-              <span className="muted">
-                {t(
-                  modelsConfigured ? "model.configured" : "model.notConfigured",
-                )}
-              </span>
-            </span>
-            <Icon name="arrow" />
-          </button>
-          <button
-            type="button"
-            className="quiet settings-row"
-            aria-haspopup="dialog"
             onClick={onOpenPresets}
           >
             <strong>{t("output.presets")}</strong>
             <Icon name="arrow" />
           </button>
         </div>
+        {children}
       </div>
     </main>
   );
