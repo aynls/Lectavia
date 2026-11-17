@@ -1,9 +1,11 @@
 mod media;
 mod models;
+mod output;
 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             media::probe_remote_video,
             media::fetch_bilibili_video,
@@ -12,6 +14,9 @@ pub fn run() {
             media::remove_media_audio,
             models::transcribe_audio_chunk,
             models::complete_text,
+            output::create_output_directory,
+            output::write_output,
+            output::reveal_output,
         ])
         .run(tauri::generate_context!())
         .expect("failed to launch Lectavia");
