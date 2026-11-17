@@ -12,6 +12,7 @@ export type MediaPart = {
 
 export type MediaInfo = {
   title: string;
+  description?: string;
   uploader?: string;
   thumbnail?: string;
   sourceUrl?: string;
@@ -40,6 +41,7 @@ type BilibiliVideo = {
   data?: {
     bvid: string;
     title: string;
+    desc?: string;
     pic?: string;
     owner?: { name?: string };
     pages?: { page: number; part?: string }[];
@@ -49,6 +51,7 @@ type BilibiliVideo = {
 type VideoProbe = {
   id?: string;
   title?: string;
+  description?: string;
   uploader?: string;
   channel?: string;
   thumbnail?: string;
@@ -72,6 +75,7 @@ function ordinaryVideo(info: VideoProbe, source: VideoSource): MediaInfo {
 
   return {
     title,
+    description: info.description?.trim() || undefined,
     uploader: info.uploader || info.channel,
     thumbnail: thumbnailUrl(info.thumbnail),
     parts: [{ id: info.id ?? "video", title, source }],
@@ -136,6 +140,8 @@ async function fallbackBilibili(url: URL, videoId: string): Promise<MediaInfo> {
   return multipartVideo(
     {
       title: flat.title || firstInfo.title || videoId,
+      description:
+        flat.description?.trim() || firstInfo.description?.trim() || undefined,
       uploader: firstInfo.uploader,
       thumbnail: thumbnailUrl(firstInfo.thumbnail),
     },
@@ -188,6 +194,7 @@ async function inspectBilibili(link: string): Promise<MediaInfo> {
   return multipartVideo(
     {
       title: details.title,
+      description: details.desc?.trim() || undefined,
       uploader: details.owner?.name,
       thumbnail: thumbnailUrl(details.pic),
     },

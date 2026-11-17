@@ -46,7 +46,9 @@ interface ChatMessage {
 interface OrganizationOptions {
   connection: ModelConnection;
   locale: Locale;
-  title: string;
+  videoTitle: string;
+  partTitle?: string;
+  description?: string;
   format: "md" | "txt";
   instructions?: string;
 }
@@ -308,7 +310,9 @@ export async function organizeTranscript(
       {
         role: "user",
         content: JSON.stringify({
-          title: options.title,
+          videoTitle: options.videoTitle,
+          partTitle: options.partTitle,
+          description: options.description,
           section: index + 1,
           sectionCount: sections.length,
           transcript: section,

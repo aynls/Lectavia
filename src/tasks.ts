@@ -9,6 +9,7 @@ import {
   type MessageKey,
 } from "./i18n";
 import {
+  partLabel,
   prepareAudio,
   removeAudio,
   type MediaInfo,
@@ -402,7 +403,9 @@ export class TaskQueue {
         part.material = await organizeTranscript(part.transcript, {
           connection: llm,
           locale,
-          title: partTitle,
+          videoTitle: media.title,
+          partTitle: media.multipart ? partLabel(part.media, t) : undefined,
+          description: media.description,
           format,
           instructions: job.instructions,
         });
