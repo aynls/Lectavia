@@ -29,6 +29,63 @@ pnpm tauri dev
 
 转写服务需支持 OpenAI 兼容的 `POST /audio/transcriptions`，整理服务需支持 `POST /chat/completions`。模型配置及 API Key 保存在系统凭据库中，界面语言也会在重启后恢复。任务队列仅在本次运行期间保留。保存目录会在任务开始前确认存在且可写，生成的文件保存在该目录。
 
+## 命令行
+
+在 Lectavia 桌面端保存模型设置后，用同一个系统账户运行 `lectavia-cli`。每次调用处理一个视频，桌面应用可以关闭。
+
+Windows 安装包将 `lectavia-cli.exe` 放在 Lectavia 的安装目录中，用完整路径或在该目录中运行。
+
+### 使用示例
+
+将示例中的视频 ID 换成实际 ID，并确认本地文件和指定的输出目录已经存在。
+
+```powershell
+.\lectavia-cli.exe ".\lesson.mp4" -o "D:\Notes" --instructions "按主题分节，保留关键术语。"
+.\lectavia-cli.exe "https://www.bilibili.com/video/BV_ID" --parts "1,3" --format txt
+.\lectavia-cli.exe "https://www.youtube.com/watch?v=YOUTUBE_ID" --instructions-file ".\instructions.md" --lang en
+```
+
+### 参数
+
+语法为 `lectavia-cli [选项] <视频>`。
+
+| 参数                         | 说明                                                                                                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<视频>`                     | 必填。传入一个本地视频路径，或一个 Bilibili、YouTube 视频的 HTTPS 链接。支持 Bilibili 短链接。                                                                      |
+| `-o, --output-dir <目录>`    | 指定已有且可写的输出目录，支持相对路径和绝对路径。默认是当前工作目录。                                                                                              |
+| `--format <格式>`            | `md`（Markdown，默认）或 `txt`（纯文本）。                                                                                                                          |
+| `--parts <编号>`             | 仅用于 Bilibili。用逗号分隔从 1 开始的分 P 编号，如 `"1,3"`。省略时使用链接中的 `?p=` 编号，链接未指定时处理第一 P。多 P 视频的文稿保存在以视频标题命名的子目录中。 |
+| `--instructions <文本>`      | 直接指定额外的整理要求。                                                                                                                                            |
+| `--instructions-file <文件>` | 从 UTF-8 文件读取额外的整理要求。与 `--instructions` 互斥。                                                                                                         |
+| `--lang <语言>`              | 内置整理提示词、文件名标签、进度和运行错误使用的语言。可选 `zh-CN`（默认）、`ja` 或 `en`。                                                                          |
+| `-h, --help`                 | 显示帮助。                                                                                                                                                          |
+| `-V, --version`              | 显示版本。                                                                                                                                                          |
+
+### 在脚本中使用
+
+处理视频时，CLI 将生成成功的文稿路径逐行写到标准输出，将进度和错误写到标准错误。PowerShell 可直接捕获路径，并通过 `$LASTEXITCODE` 获取退出码。
+
+```powershell
+$documents = & .\lectavia-cli.exe ".\lesson.mp4"
+$exitCode = $LASTEXITCODE
+```
+
+| 退出码 | 含义                                                              |
+| ------ | ----------------------------------------------------------------- |
+| `0`    | 所有请求的文稿均已生成，或已显示帮助或版本。                      |
+| `1`    | 运行失败或部分分 P 失败。已生成的文稿保留，路径仍会写到标准输出。 |
+| `2`    | 命令行参数有误，例如缺少视频参数或指定了无效的格式。              |
+
+### 单独构建 CLI
+
+在项目根目录运行以下命令。
+
+```powershell
+cargo build --manifest-path src-tauri/Cargo.toml --release --locked --no-default-features --bin lectavia-cli
+```
+
+Windows 上的默认产物路径为 `src-tauri/target/release/lectavia-cli.exe`。单独使用时，可通过 `PATH` 或 `LECTAVIA_MEDIA_DIR` 提供 FFmpeg。处理在线视频还需要 yt-dlp，YouTube 另需 Deno 或 Node.js 22 及以上。
+
 ## 检查与构建
 
 - `pnpm format` 格式化项目文件，`pnpm format:check` 检查格式。

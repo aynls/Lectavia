@@ -127,7 +127,6 @@ export function InstructionsField({
               type="button"
               className="quiet import-prompt"
               disabled={!canSavePreset}
-              aria-haspopup="dialog"
               onClick={() => onSavePreset(() => editor.current?.focus())}
             >
               <Icon name="save" />

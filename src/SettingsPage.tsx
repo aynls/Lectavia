@@ -1,6 +1,5 @@
 import { useRef, useState, type ReactNode, type SubmitEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Icon } from "./Icon";
 import {
   changeLocale,
   currentLocale,
@@ -10,7 +9,7 @@ import {
 } from "./i18n";
 
 function focusHeading(heading: HTMLHeadingElement | null) {
-  heading?.focus({ preventScroll: true });
+  heading?.focus();
 }
 
 export function SettingsPage({
@@ -18,13 +17,11 @@ export function SettingsPage({
   initialMaxConcurrency,
   onSaveMaxConcurrency,
   children,
-  onOpenPresets,
 }: {
   focusTitle: boolean;
   initialMaxConcurrency: number | null;
   onSaveMaxConcurrency: (limit: number | null) => void;
   children: ReactNode;
-  onOpenPresets: () => void;
 }) {
   const { t } = useTranslation();
   const maxConcurrencyInput = useRef<HTMLInputElement>(null);
@@ -86,9 +83,6 @@ export function SettingsPage({
               <label htmlFor="max-concurrency" id="max-concurrency-label">
                 {t("settings.maxConcurrency")}
               </label>
-              <p id="max-concurrency-hint" className="muted">
-                {t("settings.concurrencyHint")}
-              </p>
             </div>
             <div className="settings-concurrency-controls">
               <input
@@ -103,9 +97,7 @@ export function SettingsPage({
                 placeholder={t("settings.unlimitedConcurrency")}
                 aria-invalid={invalidConcurrency || undefined}
                 aria-describedby={
-                  invalidConcurrency
-                    ? "max-concurrency-hint max-concurrency-feedback"
-                    : "max-concurrency-hint"
+                  invalidConcurrency ? "max-concurrency-feedback" : undefined
                 }
                 onChange={() => setFeedback(undefined)}
               />
@@ -125,15 +117,6 @@ export function SettingsPage({
               </p>
             )}
           </form>
-          <button
-            type="button"
-            className="quiet settings-row"
-            aria-haspopup="dialog"
-            onClick={onOpenPresets}
-          >
-            <strong>{t("output.presets")}</strong>
-            <Icon name="arrow" />
-          </button>
         </div>
         {children}
       </div>

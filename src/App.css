@@ -1112,7 +1112,8 @@ button.generate[aria-disabled="true"] {
   font-size: 1.0625rem;
 }
 
-.settings-section .field-error {
+.settings-page .field-error,
+.settings-page .import-prompt {
   font-size: 1rem;
 }
 
@@ -1139,31 +1140,10 @@ button.generate[aria-disabled="true"] {
   flex-wrap: wrap;
   gap: 0.625rem 1.5rem;
   padding: 1rem clamp(1rem, 3vw, 1.5rem);
-  font-size: 0.875rem;
 }
 
 .settings-panel > .settings-row + .settings-row {
   border-block-start: 1px solid var(--line);
-}
-
-button.settings-row {
-  width: 100%;
-  border-radius: 0;
-  text-align: start;
-  white-space: normal;
-}
-
-button.settings-row:last-child {
-  border-end-start-radius: var(--radius);
-  border-end-end-radius: var(--radius);
-}
-
-button.settings-row:focus-visible {
-  outline-offset: -3px;
-}
-
-button.settings-row .icon {
-  color: var(--muted);
 }
 
 .settings-section {
@@ -1175,10 +1155,6 @@ button.settings-row .icon {
   display: grid;
   gap: 0.125rem;
   min-inline-size: 0;
-}
-
-.settings-row-copy .muted {
-  font-weight: 400;
 }
 
 .settings-concurrency-controls {
@@ -1220,27 +1196,18 @@ button.settings-row .icon {
   max-width: 36rem;
 }
 
-.settings-header .icon-button {
-  margin: -0.375rem -0.375rem 0 0;
-}
-
 .settings-body {
   min-inline-size: 0;
   margin: 0;
   border: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   padding: 1.25rem 1.5rem 1.5rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   background: var(--surface-subtle);
 }
 
 .settings-model-body {
-  grid-template-columns: minmax(0, 1fr);
-  overflow: visible;
   gap: 0;
   padding-block: 0;
 }
@@ -1385,53 +1352,25 @@ button.settings-row .icon {
   margin: 0;
 }
 
-.preset-dialog {
-  width: min(calc(100% - 2rem), 38rem);
-}
-
-.preset-save-dialog {
-  width: min(calc(100% - 2rem), 26rem);
-}
-
-.preset-dialog:modal {
-  overscroll-behavior: contain;
-}
-
-.preset-dialog::backdrop {
-  overflow: hidden;
-  overscroll-behavior: contain;
-}
-
 .preset-header {
   align-items: center;
   gap: 0.75rem;
   padding-block: 0.75rem;
 }
 
-.preset-header h2 {
+.settings-header.preset-header h3 {
   min-inline-size: 0;
   margin-bottom: 0;
   overflow-wrap: anywhere;
 }
 
-.preset-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  max-inline-size: 65%;
-}
-
-.preset-header-actions .icon-button {
-  margin: 0;
-}
-
 .preset-create-button {
   min-inline-size: 0;
+  max-inline-size: 65%;
   white-space: normal;
 }
 
 .settings-body.preset-body {
-  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   overflow-wrap: anywhere;
 }
@@ -1466,10 +1405,15 @@ button.settings-row .icon {
   gap: 0.25rem 0.875rem;
 }
 
-.preset-row-heading h3 {
+.preset-body h4 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.preset-row-heading h4 {
   flex: 1 1 10rem;
   min-inline-size: 0;
-  font-size: 0.9375rem;
+  font-size: 1.125rem;
 }
 
 .preset-preview {
@@ -1486,9 +1430,9 @@ button.settings-row .icon {
 }
 
 .preset-row-actions button {
-  min-height: 2rem;
+  min-height: 2.5rem;
   padding: 0.25rem 0.625rem;
-  font-size: 0.8125rem;
+  font-size: 1rem;
 }
 
 .preset-row-actions .preset-delete {
@@ -1523,7 +1467,7 @@ button.preset-delete:is(:hover, :focus-visible):not(:disabled) {
 }
 
 .preset-name-heading span {
-  font-size: 0.8125rem;
+  font-size: 1rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1552,7 +1496,7 @@ button.preset-delete:is(:hover, :focus-visible):not(:disabled) {
   min-inline-size: 0;
   max-inline-size: 100%;
   overflow: hidden;
-  font-size: 0.8125rem;
+  font-size: 1rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1698,12 +1642,6 @@ button.preset-delete:is(:hover, :focus-visible):not(:disabled) {
 
   .composer-body {
     overflow: visible;
-  }
-}
-
-@media (max-width: 37.5rem) {
-  .settings-body {
-    grid-template-columns: 1fr;
   }
 }
 

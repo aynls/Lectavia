@@ -1,8 +1,8 @@
 import i18next, { type TFunction } from "i18next";
 import { initReactI18next } from "react-i18next";
-import en from "./locales/en";
-import ja from "./locales/ja";
-import zhCN from "./locales/zh-CN";
+import en from "./locales/en.json";
+import ja from "./locales/ja.json";
+import zhCN from "./locales/zh-CN.json";
 
 export const languages = {
   "zh-CN": "简体中文",
@@ -70,7 +70,7 @@ void i18n.use(initReactI18next).init({
     "zh-CN": { translation: zhCN },
     ja: { translation: ja },
     en: { translation: en },
-  },
+  } satisfies Record<Locale, { translation: typeof zhCN }>,
 });
 
 export function translator(locale: Locale): TFunction {

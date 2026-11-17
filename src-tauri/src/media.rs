@@ -9,9 +9,13 @@ use std::{
 
 use crate::error::AppError;
 use reqwest::{Client, Url, header, redirect::Policy};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+#[cfg(feature = "desktop")]
+use serde::Serialize;
 use serde_json::Value;
+#[cfg(feature = "desktop")]
 use tauri::{AppHandle, Manager};
+use tempfile::TempDir;
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -24,10 +28,50 @@ pub enum MediaSource {
     Local { path: PathBuf },
 }
 
+#[cfg(feature = "desktop")]
 #[derive(Serialize)]
 pub struct AudioChunks {
     directory: PathBuf,
     files: Vec<PathBuf>,
+}
+
+pub struct PreparedAudio {
+    scratch: TempDir,
+    pub files: Vec<PathBuf>,
+}
+
+impl PreparedAudio {
+    pub fn cleanup(self) {
+        let _ = self.scratch.close();
+    }
+}
+
+#[derive(Clone)]
+pub struct MediaTools {
+    resource_dir: Option<PathBuf>,
+    local_data_dir: Option<PathBuf>,
+    require_bundled: bool,
+}
+
+impl MediaTools {
+    pub fn cli() -> Self {
+        Self {
+            resource_dir: env::current_exe()
+                .ok()
+                .and_then(|path| path.parent().map(Path::to_path_buf)),
+            local_data_dir: None,
+            require_bundled: false,
+        }
+    }
+
+    #[cfg(feature = "desktop")]
+    fn desktop(app: &AppHandle) -> Self {
+        Self {
+            resource_dir: app.path().resource_dir().ok(),
+            local_data_dir: app.path().app_local_data_dir().ok(),
+            require_bundled: !cfg!(debug_assertions),
+        }
+    }
 }
 
 fn host_is(host: &str, domain: &str) -> bool {
@@ -35,6 +79,18 @@ fn host_is(host: &str, domain: &str) -> bool {
         || host
             .strip_suffix(domain)
             .is_some_and(|prefix| prefix.ends_with('.'))
+}
+
+pub fn remote_source(input: &str) -> Result<MediaSource, AppError> {
+    let url = Url::parse(input).map_err(|_| "error.malformedVideoUrl")?;
+    let host = url.host_str().unwrap_or_default();
+    let youtube = host_is(host, "youtube.com") || host == "youtu.be";
+    let url = platform_url(input, youtube)?.to_string();
+    Ok(if youtube {
+        MediaSource::Youtube { url }
+    } else {
+        MediaSource::Bilibili { url }
+    })
 }
 
 fn platform_url(input: &str, youtube: bool) -> Result<Url, AppError> {
@@ -58,7 +114,7 @@ fn platform_url(input: &str, youtube: bool) -> Result<Url, AppError> {
     Ok(url)
 }
 
-fn find_tool(app: &AppHandle, program: &str) -> Option<PathBuf> {
+fn find_tool(tools: &MediaTools, program: &str) -> Option<PathBuf> {
     let filename = if cfg!(windows) {
         format!("{program}.exe")
     } else {
@@ -68,10 +124,10 @@ fn find_tool(app: &AppHandle, program: &str) -> Option<PathBuf> {
     if let Some(directory) = env::var_os("LECTAVIA_MEDIA_DIR") {
         directories.push(PathBuf::from(directory));
     }
-    if let Ok(directory) = app.path().app_local_data_dir() {
+    if let Some(directory) = &tools.local_data_dir {
         directories.push(directory.join("media-tools"));
     }
-    if let Ok(directory) = app.path().resource_dir() {
+    if let Some(directory) = &tools.resource_dir {
         directories.push(directory.join("media-tools"));
     }
     if let Some(path) = env::var_os("PATH") {
@@ -85,18 +141,17 @@ fn find_tool(app: &AppHandle, program: &str) -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
-fn require_tool(app: &AppHandle, program: &str) -> Result<PathBuf, AppError> {
-    find_tool(app, program)
+fn require_tool(tools: &MediaTools, program: &str) -> Result<PathBuf, AppError> {
+    find_tool(tools, program)
         .ok_or_else(|| AppError::from("error.missingTool").with("program", program))
 }
 
-fn require_ffmpeg(app: &AppHandle) -> Result<PathBuf, AppError> {
+fn require_ffmpeg(tools: &MediaTools) -> Result<PathBuf, AppError> {
     #[cfg(all(windows, target_arch = "x86_64"))]
     {
-        let bundled = app
-            .path()
-            .resource_dir()
-            .ok()
+        let bundled = tools
+            .resource_dir
+            .as_ref()
             .map(|directory| directory.join("media-tools/ffmpeg/dist/bin"));
         if let Some(directory) = bundled.filter(|path| path.join("ffprobe.exe").is_file()) {
             let ffmpeg = directory.join("ffmpeg.exe");
@@ -104,12 +159,12 @@ fn require_ffmpeg(app: &AppHandle) -> Result<PathBuf, AppError> {
                 return Ok(ffmpeg);
             }
         }
-        if !cfg!(debug_assertions) {
+        if tools.require_bundled {
             return Err("error.missingBundledFfmpeg".into());
         }
     }
 
-    require_tool(app, "ffmpeg")
+    require_tool(tools, "ffmpeg")
 }
 
 fn process_output(command: &mut Command, failure: &'static str) -> Result<Output, AppError> {
@@ -146,10 +201,10 @@ fn add_js_runtime(command: &mut Command, name: &str, path: &Path) {
     command.arg("--js-runtimes").arg(runtime);
 }
 
-fn online_media_command(app: &AppHandle, youtube: bool) -> Result<Command, AppError> {
+fn online_media_command(tools: &MediaTools, youtube: bool) -> Result<Command, AppError> {
     #[cfg(all(windows, target_arch = "x86_64"))]
     {
-        if let Ok(resources) = app.path().resource_dir() {
+        if let Some(resources) = &tools.resource_dir {
             let directory = resources.join("media-tools/online/dist");
             let python = directory.join("python/python.exe");
             let yt_dlp = directory.join("yt-dlp.pyz");
@@ -166,16 +221,16 @@ fn online_media_command(app: &AppHandle, youtube: bool) -> Result<Command, AppEr
                 return Ok(command);
             }
         }
-        if !cfg!(debug_assertions) {
+        if tools.require_bundled {
             return Err("error.missingBundledOnlineMedia".into());
         }
     }
 
-    let mut command = Command::new(require_tool(app, "yt-dlp")?);
+    let mut command = Command::new(require_tool(tools, "yt-dlp")?);
     if youtube {
         let runtimes: Vec<_> = ["deno", "node"]
             .into_iter()
-            .filter_map(|name| find_tool(app, name).map(|path| (name, path)))
+            .filter_map(|name| find_tool(tools, name).map(|path| (name, path)))
             .collect();
         if runtimes.is_empty() {
             return Err("error.youtubeRuntime".into());
@@ -189,8 +244,8 @@ fn online_media_command(app: &AppHandle, youtube: bool) -> Result<Command, AppEr
     Ok(command)
 }
 
-fn yt_dlp(app: &AppHandle, youtube: bool, ffmpeg: Option<&Path>) -> Result<Command, AppError> {
-    let mut command = online_media_command(app, youtube)?;
+fn yt_dlp(tools: &MediaTools, youtube: bool, ffmpeg: Option<&Path>) -> Result<Command, AppError> {
+    let mut command = online_media_command(tools, youtube)?;
     command.args([
         "--ignore-config",
         "--no-plugin-dirs",
@@ -212,17 +267,17 @@ fn yt_dlp(app: &AppHandle, youtube: bool, ffmpeg: Option<&Path>) -> Result<Comma
     Ok(command)
 }
 
-#[tauri::command]
-pub async fn probe_remote_video(
-    app: AppHandle,
+pub async fn probe_video(
+    tools: &MediaTools,
     url: String,
     youtube: bool,
     flat: bool,
 ) -> Result<Value, AppError> {
     let url = platform_url(&url, youtube)?;
-    tauri::async_runtime::spawn_blocking(move || {
-        let ffmpeg = require_ffmpeg(&app).ok();
-        let mut command = yt_dlp(&app, youtube, ffmpeg.as_deref())?;
+    let tools = tools.clone();
+    tokio::task::spawn_blocking(move || {
+        let ffmpeg = require_ffmpeg(&tools).ok();
+        let mut command = yt_dlp(&tools, youtube, ffmpeg.as_deref())?;
         command.arg("--dump-single-json");
         if flat {
             command.arg("--flat-playlist");
@@ -237,6 +292,17 @@ pub async fn probe_remote_video(
     .map_err(|error| AppError::detail("error.background", error))?
 }
 
+#[cfg(feature = "desktop")]
+#[tauri::command]
+pub async fn probe_remote_video(
+    app: AppHandle,
+    url: String,
+    youtube: bool,
+    flat: bool,
+) -> Result<Value, AppError> {
+    probe_video(&MediaTools::desktop(&app), url, youtube, flat).await
+}
+
 fn bilibili_client() -> Result<Client, AppError> {
     Client::builder()
         .redirect(Policy::none())
@@ -246,23 +312,11 @@ fn bilibili_client() -> Result<Client, AppError> {
         .map_err(|error| AppError::detail("error.bilibiliDetails", error))
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn fetch_bilibili_video(video_id: String) -> Result<Value, AppError> {
     let mut url = Url::parse("https://api.bilibili.com/x/web-interface/view").unwrap();
-    let query = if let Some(id) = video_id.strip_prefix("BV") {
-        if id.len() != 10 || !id.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
-            return Err("error.bilibiliId".into());
-        }
-        ("bvid", video_id.as_str())
-    } else if let Some(id) = video_id.strip_prefix("av") {
-        if id.is_empty() || id.len() > 19 || !id.bytes().all(|byte| byte.is_ascii_digit()) {
-            return Err("error.bilibiliId".into());
-        }
-        ("aid", id)
-    } else {
-        return Err("error.bilibiliId".into());
-    };
-    url.query_pairs_mut().append_pair(query.0, query.1);
+    let (key, value) = bilibili_id_query(&video_id).ok_or("error.bilibiliId")?;
+    url.query_pairs_mut().append_pair(key, value);
 
     bilibili_client()?
         .get(url)
@@ -276,7 +330,23 @@ pub async fn fetch_bilibili_video(video_id: String) -> Result<Value, AppError> {
         .map_err(|error| AppError::detail("error.bilibiliDetails", error))
 }
 
-#[tauri::command]
+pub fn bilibili_id_query(video_id: &str) -> Option<(&'static str, &str)> {
+    if let Some(id) = video_id.strip_prefix("BV")
+        && id.len() == 10
+        && id.bytes().all(|byte| byte.is_ascii_alphanumeric())
+    {
+        Some(("bvid", video_id))
+    } else if let Some(id) = video_id.strip_prefix("av")
+        && (1..=19).contains(&id.len())
+        && id.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        Some(("aid", id))
+    } else {
+        None
+    }
+}
+
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn resolve_bilibili_short_link(url: String) -> Result<String, AppError> {
     let url = platform_url(&url, false)?;
     if url.host_str() != Some("b23.tv") {
@@ -298,22 +368,22 @@ pub async fn resolve_bilibili_short_link(url: String) -> Result<String, AppError
     platform_url(resolved.as_str(), false).map(|url| url.to_string())
 }
 
-fn media_root(app: &AppHandle) -> Result<PathBuf, AppError> {
+#[cfg(feature = "desktop")]
+pub fn app_cache_dir(app: &AppHandle) -> Result<PathBuf, AppError> {
     app.path()
         .app_cache_dir()
-        .map(|path| path.join("media"))
         .map_err(|_| "error.cacheLocation".into())
 }
 
 fn download_audio(
-    app: &AppHandle,
+    tools: &MediaTools,
     directory: &Path,
     ffmpeg: &Path,
     url: &str,
     youtube: bool,
 ) -> Result<PathBuf, AppError> {
     let url = platform_url(url, youtube)?;
-    let mut command = yt_dlp(app, youtube, Some(ffmpeg))?;
+    let mut command = yt_dlp(tools, youtube, Some(ffmpeg))?;
     if youtube {
         command.arg("--check-formats");
     }
@@ -348,9 +418,13 @@ fn list_files(directory: &Path) -> Result<Vec<PathBuf>, AppError> {
         .map_err(|error| AppError::detail("error.audioCacheRead", error))
 }
 
-fn prepare_audio(app: &AppHandle, source: MediaSource) -> Result<AudioChunks, AppError> {
-    let ffmpeg = require_ffmpeg(app)?;
-    let root = media_root(app)?;
+pub fn prepare_audio(
+    tools: &MediaTools,
+    cache_dir: &Path,
+    source: MediaSource,
+) -> Result<PreparedAudio, AppError> {
+    let ffmpeg = require_ffmpeg(tools)?;
+    let root = cache_dir.join("media");
     fs::create_dir_all(root.as_path())
         .map_err(|error| AppError::detail("error.audioCacheCreate", error))?;
     let scratch = tempfile::Builder::new()
@@ -359,11 +433,12 @@ fn prepare_audio(app: &AppHandle, source: MediaSource) -> Result<AudioChunks, Ap
         .map_err(|error| AppError::detail("error.audioCacheCreate", error))?;
     let directory = scratch.path();
     let (input, remove_input) = match source {
-        MediaSource::Bilibili { url } => {
-            (download_audio(app, directory, &ffmpeg, &url, false)?, true)
-        }
+        MediaSource::Bilibili { url } => (
+            download_audio(tools, directory, &ffmpeg, &url, false)?,
+            true,
+        ),
         MediaSource::Youtube { url } => {
-            (download_audio(app, directory, &ffmpeg, &url, true)?, true)
+            (download_audio(tools, directory, &ffmpeg, &url, true)?, true)
         }
         MediaSource::Local { path } => {
             if !path.is_absolute() || !path.is_file() {
@@ -426,25 +501,32 @@ fn prepare_audio(app: &AppHandle, source: MediaSource) -> Result<AudioChunks, Ap
         return Err("error.noAudio".into());
     }
 
-    Ok(AudioChunks {
-        directory: scratch.keep(),
-        files,
-    })
+    Ok(PreparedAudio { scratch, files })
 }
 
+#[cfg(feature = "desktop")]
 #[tauri::command]
 pub async fn prepare_media_audio(
     app: AppHandle,
     source: MediaSource,
 ) -> Result<AudioChunks, AppError> {
-    tauri::async_runtime::spawn_blocking(move || prepare_audio(&app, source))
-        .await
-        .map_err(|error| AppError::detail("error.background", error))?
+    let tools = MediaTools::desktop(&app);
+    let cache = app_cache_dir(&app)?;
+    tokio::task::spawn_blocking(move || {
+        let audio = prepare_audio(&tools, &cache, source)?;
+        Ok(AudioChunks {
+            directory: audio.scratch.keep(),
+            files: audio.files,
+        })
+    })
+    .await
+    .map_err(|error| AppError::detail("error.background", error))?
 }
 
+#[cfg(feature = "desktop")]
 #[tauri::command]
 pub async fn remove_media_audio(app: AppHandle, directory: PathBuf) -> Result<(), AppError> {
-    let root = media_root(&app)?;
+    let root = app_cache_dir(&app)?.join("media");
     if directory.parent() != Some(root.as_path())
         || !directory
             .file_name()

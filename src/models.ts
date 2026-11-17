@@ -1,11 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import {
-  errorMessage,
-  message,
-  translator,
-  type Locale,
-  type Message,
-} from "./i18n";
+import { message, translator, type Locale, type Message } from "./i18n";
 import type { OutputLanguage } from "./output-language";
 
 interface ModelEndpoint {
@@ -39,11 +33,6 @@ interface CatalogEntry {
   reasoning?: { supported_efforts?: unknown; default_effort?: unknown };
 }
 
-interface ChatMessage {
-  role: "system" | "user";
-  content: string;
-}
-
 interface OrganizationOptions {
   connection: ModelConnection;
   locale: Locale;
@@ -55,17 +44,8 @@ interface OrganizationOptions {
   instructions?: string;
 }
 
-interface ChatCompletion {
-  choices?: Array<{
-    finish_reason?: string | null;
-    message?: { content?: string | null; refusal?: string | null };
-  }>;
-}
-
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 export const OPENROUTER_ASR_MODEL = "openai/whisper-large-v3-turbo";
-
-const SECTION_SIZE = 5_000;
 
 function baseUrlField(value: string): string | Message {
   const baseUrl = URL.parse(value.trim());
@@ -187,166 +167,28 @@ export async function listModels(
   return [...models.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function transcribeAudio(
+export function transcribeAudio(
   files: string[],
   connection: ModelConnection,
 ): Promise<string> {
-  const profile = normalizeConnection(connection);
-  const transcripts: string[] = [];
-
-  for (const [index, path] of files.entries()) {
-    try {
-      const result = await invoke<{ text?: unknown }>(
-        "transcribe_audio_chunk",
-        {
-          ...profile,
-          path,
-        },
-      );
-
-      if (typeof result?.text !== "string") {
-        throw message("error.transcriptionMissing");
-      }
-
-      const text = result.text.trim();
-      if (text) {
-        transcripts.push(text);
-      }
-    } catch (error) {
-      throw message("error.transcriptionChunk", {
-        number: index + 1,
-        cause: errorMessage(error),
-      });
-    }
-  }
-
-  if (!transcripts.length) {
-    throw message("error.noSpeech");
-  }
-
-  return transcripts.join("\n\n");
+  return invoke("transcribe_audio", {
+    files,
+    connection: normalizeConnection(connection),
+  });
 }
 
-function splitTranscript(transcript: string): string[] {
-  const sections: string[] = [];
-  let start = 0;
-
-  while (start < transcript.length) {
-    let end = Math.min(start + SECTION_SIZE, transcript.length);
-    if (end < transcript.length) {
-      const candidate = transcript.slice(start, end);
-      const sentenceEnd = Math.max(
-        ...["\n", "。", "！", "？", "! ", "? ", ". "].map((separator) =>
-          candidate.lastIndexOf(separator),
-        ),
-      );
-
-      const boundary =
-        sentenceEnd >= SECTION_SIZE / 2
-          ? sentenceEnd
-          : candidate.lastIndexOf(" ");
-      if (boundary >= SECTION_SIZE / 2) {
-        end = start + boundary + 1;
-      } else {
-        const last = transcript.charCodeAt(end - 1);
-        if (last >= 0xd800 && last <= 0xdbff) {
-          end--;
-        }
-      }
-    }
-
-    const section = transcript.slice(start, end).trim();
-    if (section) {
-      sections.push(section);
-    }
-
-    start = end;
-  }
-
-  return sections;
-}
-
-function organizationPrompt(options: OrganizationOptions): string {
-  const t = translator(options.locale);
-  const language = t(`outputLanguage.${options.outputLanguage}`);
-  const prompt = [
-    t(options.format === "md" ? "prompt.markdown" : "prompt.plainText", {
-      language,
-    }),
-    t("prompt.fidelity"),
-    t("prompt.context"),
-    t("prompt.priority"),
-  ];
-
-  const instructions = options.instructions?.trim();
-  if (instructions) {
-    prompt.push(t("prompt.custom"), instructions);
-  }
-
-  return prompt.join("\n\n");
-}
-
-export async function organizeTranscript(
+export function organizeTranscript(
   transcript: string,
-  options: OrganizationOptions,
+  { connection, ...options }: OrganizationOptions,
 ): Promise<string> {
-  const profile = normalizeConnection(options.connection);
-  const reasoningEffort = options.connection.reasoningEfforts?.includes(
-    options.connection.reasoningEffort ?? "",
-  )
-    ? options.connection.reasoningEffort
-    : undefined;
-  const sections = splitTranscript(transcript);
-  if (!sections.length) {
-    throw message("error.emptyTranscript");
-  }
-
-  const systemPrompt = organizationPrompt(options);
-  const material: string[] = [];
-
-  for (const [index, section] of sections.entries()) {
-    const messages: ChatMessage[] = [
-      { role: "system", content: systemPrompt },
-      {
-        role: "user",
-        content: JSON.stringify({
-          videoTitle: options.videoTitle,
-          partTitle: options.partTitle,
-          description: options.description,
-          section: index + 1,
-          sectionCount: sections.length,
-          transcript: section,
-        }),
-      },
-    ];
-    const result = await invoke<ChatCompletion>("complete_text", {
-      ...profile,
-      messages,
-      reasoningEffort,
-    });
-    const choice = result?.choices?.[0];
-
-    if (choice?.finish_reason === "length") {
-      throw message("error.outputLength");
-    }
-    if (
-      choice?.finish_reason === "content_filter" ||
-      choice?.message?.refusal
-    ) {
-      throw message("error.modelRefusal");
-    }
-
-    const content = choice?.message?.content;
-    if (
-      (choice?.finish_reason && choice.finish_reason !== "stop") ||
-      typeof content !== "string" ||
-      !content.trim()
-    ) {
-      throw message("error.modelEmpty");
-    }
-
-    material.push(content.trim());
-  }
-
-  return material.join("\n\n") + "\n";
+  return invoke("organize_transcript", {
+    transcript,
+    options: {
+      ...options,
+      outputLanguage: translator(options.locale)(
+        `outputLanguage.${options.outputLanguage}`,
+      ),
+    },
+    connection: { ...connection, ...normalizeConnection(connection) },
+  });
 }

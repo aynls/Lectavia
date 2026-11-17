@@ -8,6 +8,7 @@
     "build": "pnpm typecheck && vite build",
     "app:dev": "tauri dev",
     "app:build": "tauri build",
+    "app:build:setup": "tauri build --bundles nsis",
     "preview": "vite preview",
     "tauri": "tauri",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",

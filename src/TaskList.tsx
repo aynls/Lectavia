@@ -178,7 +178,6 @@ function TaskCard({
         <button
           type="button"
           className="primary"
-          aria-haspopup="dialog"
           disabled={recovering}
           onClick={() => void recover(modelRecovery)}
         >

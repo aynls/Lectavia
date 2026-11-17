@@ -5,9 +5,9 @@ use serde_json::{Map, Value};
 
 #[derive(Debug, Serialize)]
 pub struct AppError {
-    key: &'static str,
+    pub(crate) key: &'static str,
     #[serde(skip_serializing_if = "Map::is_empty")]
-    values: Map<String, Value>,
+    pub(crate) values: Map<String, Value>,
 }
 
 impl AppError {

@@ -1,10 +1,12 @@
 use std::{
-    path::{Component, Path},
+    path::{Component, Path, PathBuf},
     sync::OnceLock,
     time::Duration,
 };
 
-use crate::error::AppError;
+#[cfg(feature = "desktop")]
+use crate::media::app_cache_dir;
+use crate::{error::AppError, locale::Locale, output::OutputFormat, settings::ModelConnection};
 use reqwest::{
     Client, StatusCode, Url,
     multipart::{Form, Part},
@@ -12,10 +14,12 @@ use reqwest::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use tauri::{AppHandle, Manager};
+#[cfg(feature = "desktop")]
+use tauri::AppHandle;
 use tokio::fs::{self, File};
 
 const MAX_AUDIO_BYTES: u64 = 25_000_000;
+const SECTION_SIZE: usize = 5_000;
 
 static CLIENT: OnceLock<Result<Client, reqwest::Error>> = OnceLock::new();
 
@@ -65,11 +69,7 @@ fn credentials<'a>(api_key: &'a str, model: &'a str) -> Result<(&'a str, &'a str
     Ok((api_key, model))
 }
 
-async fn checked_audio(app: &AppHandle, path: &Path) -> Result<File, AppError> {
-    let cache = app
-        .path()
-        .app_cache_dir()
-        .map_err(|_| "error.cacheLocation")?;
+async fn checked_audio(cache: &Path, path: &Path) -> Result<File, AppError> {
     let media = fs::canonicalize(cache)
         .await
         .map_err(|_| "error.cacheAccess")?
@@ -147,6 +147,7 @@ async fn send_json(
     })
 }
 
+#[cfg(feature = "desktop")]
 #[tauri::command]
 pub async fn list_models(
     base_url: String,
@@ -172,17 +173,14 @@ pub async fn list_models(
     .await
 }
 
-#[tauri::command]
-pub async fn transcribe_audio_chunk(
-    app: AppHandle,
-    base_url: String,
-    api_key: String,
-    model: String,
-    path: String,
-) -> Result<Value, AppError> {
-    let url = endpoint(&base_url, "audio/transcriptions")?;
-    let (api_key, model) = credentials(&api_key, &model)?;
-    let audio = checked_audio(&app, Path::new(&path)).await?;
+async fn transcribe_audio_chunk(
+    cache: &Path,
+    connection: &ModelConnection,
+    path: &Path,
+) -> Result<String, AppError> {
+    let url = endpoint(&connection.base_url, "audio/transcriptions")?;
+    let (api_key, model) = credentials(&connection.api_key, &connection.model)?;
+    let audio = checked_audio(cache, path).await?;
     let metadata = audio
         .metadata()
         .await
@@ -202,7 +200,7 @@ pub async fn transcribe_audio_chunk(
     let form = Form::new()
         .text("model", model.to_owned())
         .part("file", part);
-    send_json(
+    let result = send_json(
         client()?
             .post(url)
             .timeout(Duration::from_secs(90))
@@ -210,7 +208,45 @@ pub async fn transcribe_audio_chunk(
             .multipart(form),
         "model.purpose.asr",
     )
-    .await
+    .await?;
+    result["text"]
+        .as_str()
+        .map(|text| text.trim().to_owned())
+        .ok_or_else(|| "error.transcriptionMissing".into())
+}
+
+pub async fn transcribe(
+    cache: &Path,
+    files: &[PathBuf],
+    connection: &ModelConnection,
+) -> Result<String, AppError> {
+    let mut transcript = Vec::new();
+    for (index, path) in files.iter().enumerate() {
+        let text = transcribe_audio_chunk(cache, connection, path)
+            .await
+            .map_err(|error| {
+                AppError::from("error.transcriptionChunk")
+                    .with("number", index + 1)
+                    .with("cause", json!(error))
+            })?;
+        if !text.is_empty() {
+            transcript.push(text);
+        }
+    }
+    if transcript.is_empty() {
+        return Err("error.noSpeech".into());
+    }
+    Ok(transcript.join("\n\n"))
+}
+
+#[cfg(feature = "desktop")]
+#[tauri::command]
+pub async fn transcribe_audio(
+    app: AppHandle,
+    files: Vec<PathBuf>,
+    connection: ModelConnection,
+) -> Result<String, AppError> {
+    transcribe(&app_cache_dir(&app)?, &files, &connection).await
 }
 
 #[derive(Deserialize, Serialize)]
@@ -221,7 +257,7 @@ enum ChatRole {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct ChatMessage {
+struct ChatMessage {
     role: ChatRole,
     content: String,
 }
@@ -234,20 +270,16 @@ struct ChatRequest<'a> {
     reasoning_effort: Option<&'a str>,
 }
 
-#[tauri::command]
-pub async fn complete_text(
-    base_url: String,
-    api_key: String,
-    model: String,
+async fn complete_text(
+    connection: &ModelConnection,
     messages: Vec<ChatMessage>,
-    reasoning_effort: Option<String>,
 ) -> Result<Value, AppError> {
-    let url = endpoint(&base_url, "chat/completions")?;
-    let (api_key, model) = credentials(&api_key, &model)?;
+    let url = endpoint(&connection.base_url, "chat/completions")?;
+    let (api_key, model) = credentials(&connection.api_key, &connection.model)?;
     let body = ChatRequest {
         model,
         messages,
-        reasoning_effort: reasoning_effort.as_deref(),
+        reasoning_effort: connection.selected_reasoning_effort(),
     };
     send_json(
         client()?
@@ -258,4 +290,153 @@ pub async fn complete_text(
         "model.purpose.llm",
     )
     .await
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrganizationOptions {
+    pub locale: Locale,
+    pub output_language: Option<String>,
+    pub video_title: String,
+    pub part_title: Option<String>,
+    pub description: Option<String>,
+    pub format: OutputFormat,
+    pub instructions: Option<String>,
+}
+
+fn section_end(text: &str) -> usize {
+    let mut units = 0;
+    let mut sentence_end = None;
+    let mut word_end = None;
+    for (index, character) in text.char_indices() {
+        let width = character.len_utf16();
+        if units + width > SECTION_SIZE {
+            return sentence_end.or(word_end).unwrap_or(index);
+        }
+        if units >= SECTION_SIZE / 2 {
+            let end = index + character.len_utf8();
+            if matches!(character, '\n' | '。' | '！' | '？')
+                || (matches!(character, '!' | '?' | '.')
+                    && units + 1 < SECTION_SIZE
+                    && text[end..].starts_with(' '))
+            {
+                sentence_end = Some(end);
+            }
+            if character == ' ' {
+                word_end = Some(end);
+            }
+        }
+        units += width;
+    }
+    text.len()
+}
+
+fn organization_prompt(options: &OrganizationOptions) -> String {
+    let locale = options.locale;
+    let language = options.output_language.as_deref().unwrap_or_else(|| {
+        locale.text(match locale {
+            Locale::ZhCn => "outputLanguage.zh-CN",
+            Locale::Ja => "outputLanguage.ja",
+            Locale::En => "outputLanguage.en",
+        })
+    });
+    let intro = locale
+        .text(match options.format {
+            OutputFormat::Md => "prompt.markdown",
+            OutputFormat::Txt => "prompt.plainText",
+        })
+        .replace("{{language}}", language);
+    let mut paragraphs = vec![
+        intro.as_str(),
+        locale.text("prompt.fidelity"),
+        locale.text("prompt.context"),
+        locale.text("prompt.priority"),
+    ];
+    if let Some(instructions) = options.instructions.as_deref().map(str::trim)
+        && !instructions.is_empty()
+    {
+        paragraphs.extend([locale.text("prompt.custom"), instructions]);
+    }
+    paragraphs.join("\n\n")
+}
+
+pub async fn organize(
+    mut transcript: &str,
+    connection: &ModelConnection,
+    options: &OrganizationOptions,
+) -> Result<String, AppError> {
+    let mut sections = Vec::new();
+    while !transcript.is_empty() {
+        let (section, rest) = transcript.split_at(section_end(transcript));
+        if !section.trim().is_empty() {
+            sections.push(section.trim());
+        }
+        transcript = rest;
+    }
+    if sections.is_empty() {
+        return Err("error.emptyTranscript".into());
+    }
+
+    let system_prompt = organization_prompt(options);
+    let mut material = Vec::new();
+    for (index, section) in sections.iter().enumerate() {
+        let mut source = json!({
+            "videoTitle": options.video_title,
+            "section": index + 1,
+            "sectionCount": sections.len(),
+            "transcript": section,
+        });
+        if let Some(part_title) = &options.part_title {
+            source["partTitle"] = json!(part_title);
+        }
+        if let Some(description) = &options.description {
+            source["description"] = json!(description);
+        }
+
+        let response = complete_text(
+            connection,
+            vec![
+                ChatMessage {
+                    role: ChatRole::System,
+                    content: system_prompt.clone(),
+                },
+                ChatMessage {
+                    role: ChatRole::User,
+                    content: source.to_string(),
+                },
+            ],
+        )
+        .await?;
+        let choice = &response["choices"][0];
+        let finish_reason = choice["finish_reason"].as_str().unwrap_or_default();
+        if finish_reason == "length" {
+            return Err("error.outputLength".into());
+        }
+        if finish_reason == "content_filter"
+            || choice["message"]["refusal"]
+                .as_str()
+                .is_some_and(|refusal| !refusal.is_empty())
+        {
+            return Err("error.modelRefusal".into());
+        }
+        let content = choice["message"]["content"]
+            .as_str()
+            .unwrap_or_default()
+            .trim();
+        if !matches!(finish_reason, "" | "stop") || content.is_empty() {
+            return Err("error.modelEmpty".into());
+        }
+        material.push(content.to_owned());
+    }
+    Ok(material.join("\n\n") + "\n")
+}
+
+#[cfg(feature = "desktop")]
+#[tauri::command]
+pub async fn organize_transcript(
+    transcript: String,
+    connection: ModelConnection,
+    options: OrganizationOptions,
+) -> Result<String, AppError> {
+    organize(&transcript, &connection, &options).await
 }

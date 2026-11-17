@@ -25,7 +25,7 @@ import {
 } from "./instruction-presets";
 import {
   InstructionPresetSettings,
-  type InstructionPresetSettingsHandle,
+  type PresetDraft,
 } from "./InstructionPresetSettings";
 import { InstructionsField } from "./InstructionsField";
 import { inspectMedia, partLabel, type MediaInfo } from "./media";
@@ -48,14 +48,14 @@ import "./App.css";
 
 type SourceMode = "link" | "local";
 type FolderStatus = "unselected" | "checking" | "ready" | "error";
-
 type SettingsEntry =
   | { kind: "general" }
   | {
       kind: "models";
       purpose?: ModelPurpose;
       onRetry?: (value: ModelSettingsValue) => void;
-    };
+    }
+  | { kind: "presets"; draft: PresetDraft };
 
 const desktop = isTauri();
 const FOLDER_STORAGE_KEY = "lectavia.output-directory";
@@ -134,7 +134,6 @@ export default function App({
   const [queueing, setQueueing] = useState(false);
   const composer = useRef<HTMLElement>(null);
   const returnFocus = useRef<() => void>(undefined);
-  const presetSettings = useRef<InstructionPresetSettingsHandle>(null);
   const restoreDialog = useRef<HTMLDialogElement>(null);
   const pendingRestoreId = useRef("");
   const workspaceRevision = useRef(0);
@@ -144,6 +143,8 @@ export default function App({
   const settingsOpen = settingsEntry !== undefined;
   const modelEntry =
     settingsEntry?.kind === "models" ? settingsEntry : undefined;
+  const presetEntry =
+    settingsEntry?.kind === "presets" ? settingsEntry : undefined;
   const preset = presets.find((entry) => entry.id === presetId);
   const prompt = preset ? preset.prompt : importedPrompt;
   const instructions = prompt
@@ -436,10 +437,10 @@ export default function App({
   function savePreset(focusEditor: () => void) {
     if (!canSavePreset) return;
     setInstructionsError(undefined);
-    presetSettings.current?.saveDraft({ instructions, prompt }, (id) => {
-      setPresetId(id);
-      focusEditor();
-    });
+    openSettings(
+      { kind: "presets", draft: { instructions, prompt } },
+      focusEditor,
+    );
   }
 
   async function saveModelSettings(next: ModelSettingsValue) {
@@ -631,7 +632,6 @@ export default function App({
           focusTitle={settingsEntry.kind === "general"}
           initialMaxConcurrency={queue.maxConcurrency}
           onSaveMaxConcurrency={saveMaxConcurrency}
-          onOpenPresets={() => presetSettings.current?.open()}
         >
           <ModelSettings
             value={settings}
@@ -649,6 +649,21 @@ export default function App({
                 : undefined
             }
             onCancel={modelEntry ? closeSettings : undefined}
+          />
+          <InstructionPresetSettings
+            presets={presets}
+            onChange={updatePresets}
+            onPickFile={desktop ? pickPromptFile : undefined}
+            saveDraft={
+              presetEntry && {
+                draft: presetEntry.draft,
+                onSaved: (id) => {
+                  setPresetId(id);
+                  closeSettings();
+                },
+                onCancel: closeSettings,
+              }
+            }
           />
         </SettingsPage>
       )}
@@ -1097,12 +1112,6 @@ export default function App({
           />
         </div>
       </main>
-      <InstructionPresetSettings
-        ref={presetSettings}
-        presets={presets}
-        onChange={updatePresets}
-        onPickFile={desktop ? pickPromptFile : undefined}
-      />
       <dialog
         ref={restoreDialog}
         className="settings-dialog restore-dialog"

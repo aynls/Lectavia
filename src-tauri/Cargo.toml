@@ -4,21 +4,33 @@ version = "0.1.0"
 description = "Transcribe and organize videos into editable documents."
 license = "MIT"
 edition = "2024"
+default-run = "lectavia"
+
+[[bin]]
+name = "lectavia"
+path = "src/main.rs"
+required-features = ["desktop"]
 
 [lib]
 name = "lectavia_lib"
 crate-type = ["rlib"]
 
+[features]
+default = ["desktop"]
+desktop = ["dep:tauri", "dep:tauri-build", "dep:tauri-plugin-dialog", "dep:tauri-plugin-opener"]
+
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+serde_json = "1"
+tauri-build = { version = "2", optional = true , features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
-tauri-plugin-dialog = "2"
+clap = { version = "4", features = ["derive"] }
+tauri = { version = "2", optional = true , features = [] }
+tauri-plugin-dialog = { version = "2", optional = true }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "system-proxy", "json", "multipart", "stream"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"
-tokio = { version = "1", features = ["fs"] }
-tauri-plugin-opener = "2"
+tokio = { version = "1", features = ["fs", "macros", "rt"] }
+tauri-plugin-opener = { version = "2", optional = true }
 keyring = { version = "3.6.3", features = ["windows-native", "apple-native", "sync-secret-service", "crypto-rust", "vendored"] }

@@ -1,10 +1,17 @@
+mod cli;
 mod error;
+mod locale;
 mod media;
 mod models;
 mod output;
+#[cfg(feature = "desktop")]
 mod prompt;
 mod settings;
+mod video;
 
+pub use cli::run as run_cli;
+
+#[cfg(feature = "desktop")]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -16,8 +23,8 @@ pub fn run() {
             media::prepare_media_audio,
             media::remove_media_audio,
             models::list_models,
-            models::transcribe_audio_chunk,
-            models::complete_text,
+            models::transcribe_audio,
+            models::organize_transcript,
             output::create_output_directory,
             output::validate_output_directory,
             output::write_output,

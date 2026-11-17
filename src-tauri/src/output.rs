@@ -5,11 +5,29 @@ use std::{
 };
 
 use crate::error::AppError;
+use clap::ValueEnum;
 use serde::Deserialize;
+#[cfg(feature = "desktop")]
 use tauri_plugin_opener::OpenerExt;
 use tempfile::NamedTempFile;
 
 const MAX_TITLE_UNITS: usize = 100;
+
+#[derive(Clone, Copy, Deserialize, ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum OutputFormat {
+    Md,
+    Txt,
+}
+
+impl OutputFormat {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Md => "md",
+            Self::Txt => "txt",
+        }
+    }
+}
 
 fn safe_title(title: &str) -> Option<String> {
     let mut name = String::new();
@@ -81,7 +99,7 @@ fn selected_directory(path: &str) -> Result<&Path, AppError> {
     }
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn validate_output_directory(directory: String) -> Result<String, AppError> {
     let directory = selected_directory(&directory)?;
     NamedTempFile::new_in(directory)
@@ -102,7 +120,7 @@ fn already_present(error: &io::Error, path: &Path) -> bool {
         || (error.kind() == io::ErrorKind::PermissionDenied && path.symlink_metadata().is_ok())
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn create_output_directory(
     directory: String,
     title: String,
@@ -125,11 +143,11 @@ pub async fn create_output_directory(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OutputLabels {
-    fallback_title: String,
-    document_suffix: String,
+    pub fallback_title: String,
+    pub document_suffix: String,
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn write_output(
     directory: String,
     title: String,
@@ -177,6 +195,7 @@ pub async fn write_output(
     }
 }
 
+#[cfg(feature = "desktop")]
 #[tauri::command]
 pub async fn open_output(app: tauri::AppHandle, path: String) -> Result<(), AppError> {
     let target = Path::new(&path);
@@ -202,6 +221,7 @@ pub async fn open_output(app: tauri::AppHandle, path: String) -> Result<(), AppE
         .map_err(|error| AppError::detail("error.outputOpen", error))
 }
 
+#[cfg(feature = "desktop")]
 #[tauri::command]
 pub async fn reveal_output(
     app: tauri::AppHandle,
@@ -247,56 +267,52 @@ mod tests {
         );
     }
 
-    #[test]
-    fn validates_output_directory_before_starting() {
-        tauri::async_runtime::block_on(async {
-            let root = tempfile::tempdir().unwrap();
-            let directory = root.path().to_string_lossy().into_owned();
-            assert_eq!(
-                validate_output_directory(directory.clone()).await.unwrap(),
-                directory
-            );
+    #[tokio::test]
+    async fn validates_output_directory_before_starting() {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().to_string_lossy().into_owned();
+        assert_eq!(
+            validate_output_directory(directory.clone()).await.unwrap(),
+            directory
+        );
 
-            let missing = root.path().join("missing").to_string_lossy().into_owned();
-            assert!(validate_output_directory(missing).await.is_err());
-        });
+        let missing = root.path().join("missing").to_string_lossy().into_owned();
+        assert!(validate_output_directory(missing).await.is_err());
     }
 
-    #[test]
-    fn writes_multipart_outputs_without_overwriting() {
-        tauri::async_runtime::block_on(async {
-            let root = tempfile::tempdir().unwrap();
-            let directory = root.path().to_string_lossy().into_owned();
-            let title = "课程".to_owned();
-            let labels = || OutputLabels {
-                fallback_title: "视频".into(),
-                document_suffix: "文稿".into(),
-            };
-            let folder = create_output_directory(directory.clone(), title.clone(), "视频".into())
-                .await
-                .unwrap();
-            let second = create_output_directory(directory, title.clone(), "视频".into())
-                .await
-                .unwrap();
-            assert!(second.ends_with("课程 (2)"));
-            let first_file = write_output(
-                folder.clone(),
-                title.clone(),
-                "md".into(),
-                "初稿".into(),
-                Some(2),
-                labels(),
-            )
+    #[tokio::test]
+    async fn writes_multipart_outputs_without_overwriting() {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().to_string_lossy().into_owned();
+        let title = "课程".to_owned();
+        let labels = || OutputLabels {
+            fallback_title: "视频".into(),
+            document_suffix: "文稿".into(),
+        };
+        let folder = create_output_directory(directory.clone(), title.clone(), "视频".into())
             .await
             .unwrap();
-            let second_file =
-                write_output(folder, title, "md".into(), "新稿".into(), Some(2), labels())
-                    .await
-                    .unwrap();
-            assert!(first_file.ends_with("P02-课程-文稿.md"));
-            assert!(second_file.ends_with("P02-课程-文稿 (2).md"));
-            assert_eq!(fs::read_to_string(first_file).unwrap(), "初稿");
-            assert_eq!(fs::read_to_string(second_file).unwrap(), "新稿");
-        });
+        let second = create_output_directory(directory, title.clone(), "视频".into())
+            .await
+            .unwrap();
+        assert!(second.ends_with("课程 (2)"));
+        let first_file = write_output(
+            folder.clone(),
+            title.clone(),
+            "md".into(),
+            "初稿".into(),
+            Some(2),
+            labels(),
+        )
+        .await
+        .unwrap();
+        let second_file =
+            write_output(folder, title, "md".into(), "新稿".into(), Some(2), labels())
+                .await
+                .unwrap();
+        assert!(first_file.ends_with("P02-课程-文稿.md"));
+        assert!(second_file.ends_with("P02-课程-文稿 (2).md"));
+        assert_eq!(fs::read_to_string(first_file).unwrap(), "初稿");
+        assert_eq!(fs::read_to_string(second_file).unwrap(), "新稿");
     }
 }
