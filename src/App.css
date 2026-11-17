@@ -1232,6 +1232,21 @@ textarea {
   background-color: var(--scrim);
 }
 
+.restore-dialog {
+  width: min(calc(100% - 2rem), 25rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.restore-dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.restore-dialog .settings-header {
+  border-bottom: 0;
+}
+
 .settings-trigger {
   justify-content: flex-start;
   width: min(20rem, 42vw);

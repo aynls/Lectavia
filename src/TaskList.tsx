@@ -29,7 +29,15 @@ function partStatus(part: TaskPart) {
   );
 }
 
-function TaskCard({ task, queue }: { task: Task; queue: TaskQueue }) {
+function TaskCard({
+  task,
+  queue,
+  onRestore,
+}: {
+  task: Task;
+  queue: TaskQueue;
+  onRestore: (taskId: string) => void;
+}) {
   const title = useRef<HTMLHeadingElement>(null);
   const [revealError, setRevealError] = useState("");
   const [revealing, setRevealing] = useState(false);
@@ -125,35 +133,36 @@ function TaskCard({ task, queue }: { task: Task; queue: TaskQueue }) {
           {path}
         </p>
       )}
-      {(path || canRetry) && (
-        <div className="actions task-actions">
-          {path && (
-            <button
-              type="button"
-              onClick={() => void reveal()}
-              disabled={revealing}
-            >
-              <Icon name="folder" />
-              {revealing
-                ? "正在打开…"
-                : task.outputDirectory
-                  ? "打开输出目录"
-                  : "定位文稿"}
-            </button>
-          )}
-          {canRetry && (
-            <button
-              type="button"
-              onClick={() => {
-                queue.retry(task.id);
-                title.current?.focus({ preventScroll: true });
-              }}
-            >
-              重试失败项
-            </button>
-          )}
-        </div>
-      )}
+      <div className="actions task-actions">
+        {path && (
+          <button
+            type="button"
+            onClick={() => void reveal()}
+            disabled={revealing}
+          >
+            <Icon name="folder" />
+            {revealing
+              ? "正在打开…"
+              : task.outputDirectory
+                ? "打开输出目录"
+                : "定位文稿"}
+          </button>
+        )}
+        {canRetry && (
+          <button
+            type="button"
+            onClick={() => {
+              queue.retry(task.id);
+              title.current?.focus({ preventScroll: true });
+            }}
+          >
+            重试失败项
+          </button>
+        )}
+        <button type="button" onClick={() => onRestore(task.id)}>
+          恢复
+        </button>
+      </div>
       {revealError && (
         <p className="error task-error" role="alert">
           {revealError}
@@ -163,7 +172,13 @@ function TaskCard({ task, queue }: { task: Task; queue: TaskQueue }) {
   );
 }
 
-export function TaskList({ queue }: { queue: TaskQueue }) {
+export function TaskList({
+  queue,
+  onRestore,
+}: {
+  queue: TaskQueue;
+  onRestore: (taskId: string) => void;
+}) {
   const tasks = useSyncExternalStore(queue.subscribe, queue.getSnapshot);
 
   return (
@@ -185,7 +200,12 @@ export function TaskList({ queue }: { queue: TaskQueue }) {
             .slice()
             .reverse()
             .map((task) => (
-              <TaskCard key={task.id} task={task} queue={queue} />
+              <TaskCard
+                key={task.id}
+                task={task}
+                queue={queue}
+                onRestore={onRestore}
+              />
             ))}
         </ul>
       )}

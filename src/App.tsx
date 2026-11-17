@@ -15,7 +15,7 @@ import {
   type ModelSettingsValue,
 } from "./ModelSettings";
 import { TaskList } from "./TaskList";
-import { TaskQueue, type PromptFile } from "./tasks";
+import { TaskQueue, type PromptFile, type TaskRequest } from "./tasks";
 import { parseVideoLink, type VideoSource } from "./video-source";
 import logoUrl from "../design/lectavia-logo.svg";
 import "./App.css";
@@ -65,6 +65,10 @@ export default function App() {
   const [prompt, setPrompt] = useState<PromptFile | null>(null);
   const [settings, setSettings] = useState<ModelSettingsValue | null>(null);
   const [queueing, setQueueing] = useState(false);
+  const composer = useRef<HTMLElement>(null);
+  const restoreDialog = useRef<HTMLDialogElement>(null);
+  const pendingRestoreId = useRef("");
+  const workspaceRevision = useRef(0);
   const linkInput = useRef<HTMLInputElement>(null);
   const requestId = useRef(0);
   const previewKey = useRef("");
@@ -107,12 +111,13 @@ export default function App() {
     if (!desktop) return;
 
     let active = true;
+    const revision = workspaceRevision.current;
     async function prepareFolder() {
       const previous = rememberedFolder();
       if (previous) {
         try {
           await invoke("validate_output_directory", { directory: previous });
-          if (!active) return;
+          if (!active || revision !== workspaceRevision.current) return;
           setFolder(previous);
           setFolderStatus("ready");
           return;
@@ -123,13 +128,13 @@ export default function App() {
 
       try {
         const path = await invoke<string>("default_output_directory");
-        if (!active) return;
+        if (!active || revision !== workspaceRevision.current) return;
         setFolder(path);
         setFolderStatus("ready");
         setFolderError("");
         rememberFolder(path);
       } catch {
-        if (!active) return;
+        if (!active || revision !== workspaceRevision.current) return;
         setFolderStatus("error");
         setFolderError("无法准备默认保存目录，请手动选择。");
       }
@@ -217,6 +222,7 @@ export default function App() {
   }
 
   async function chooseVideo() {
+    const revision = workspaceRevision.current;
     try {
       const path = await open({
         title: "选择本地视频",
@@ -229,16 +235,18 @@ export default function App() {
         ],
       });
 
-      if (path) {
+      if (path && revision === workspaceRevision.current) {
         setLink("");
         void preview({ kind: "local", path });
       }
     } catch {
+      if (revision !== workspaceRevision.current) return;
       setSourceError("无法打开视频选择窗口。");
     }
   }
 
   async function chooseFolder() {
+    const revision = workspaceRevision.current;
     setFormError("");
     setFolderError("");
     try {
@@ -248,30 +256,35 @@ export default function App() {
         multiple: false,
         defaultPath: folder || undefined,
       });
-      if (!path) return;
+      if (!path || revision !== workspaceRevision.current) return;
 
       setFolderStatus("checking");
       try {
         await invoke("validate_output_directory", { directory: path });
+        if (revision !== workspaceRevision.current) return;
         setFolder(path);
         setFolderStatus("ready");
         rememberFolder(path);
       } catch (error) {
+        if (revision !== workspaceRevision.current) return;
         setFolderStatus(folder ? "ready" : "error");
         setFolderError(`${errorMessage(error)} 请重新选择保存目录。`);
       }
     } catch {
+      if (revision !== workspaceRevision.current) return;
       setFolderStatus(folder ? "ready" : "error");
       setFolderError("无法打开目录选择窗口。");
     }
   }
 
   async function choosePrompt() {
+    const revision = workspaceRevision.current;
     setFormError("");
     try {
       const file = await invoke<PromptFile | null>("choose_prompt_file");
-      if (file) setPrompt(file);
+      if (file && revision === workspaceRevision.current) setPrompt(file);
     } catch (error) {
+      if (revision !== workspaceRevision.current) return;
       setFormError(errorMessage(error));
     }
   }
@@ -282,9 +295,62 @@ export default function App() {
     if (sourceMode === "link") linkInput.current?.focus();
   }
 
+  function restoreRequest(request: TaskRequest) {
+    workspaceRevision.current += 1;
+    clearPreview();
+
+    const source = request.media.parts[0].source;
+    setSourceMode(source.kind === "local" ? "local" : "link");
+    setLink(request.link);
+    previewKey.current =
+      source.kind === "local"
+        ? source.path
+        : (URL.parse(request.link.trim())?.href ?? "");
+    setMedia(request.media);
+    setSelectedParts(request.selectedParts);
+    setInstructions(request.instructions);
+    setPrompt(request.prompt);
+    setFolder(request.outputDirectory);
+    setFolderStatus("ready");
+    setFolderError("");
+    setFormat(request.format);
+    setSettings({ asr: request.asr, llm: request.llm });
+    setFormError("");
+    composer.current?.focus();
+  }
+
+  function restoreTask(taskId: string) {
+    if (link.trim() || media || instructions.trim() || prompt) {
+      const dialog = restoreDialog.current;
+      if (dialog) {
+        pendingRestoreId.current = taskId;
+        dialog.returnValue = "";
+        dialog.showModal();
+      }
+      return;
+    }
+
+    const request = queue.getRequest(taskId);
+    if (request) restoreRequest(request);
+  }
+
+  function finishRestore(dialog: HTMLDialogElement) {
+    if (dialog.open) return;
+    const taskId = pendingRestoreId.current;
+    const confirmed = dialog.returnValue === "restore";
+    pendingRestoreId.current = "";
+    dialog.returnValue = "";
+
+    if (confirmed) {
+      const request = queue.getRequest(taskId);
+      if (request) restoreRequest(request);
+    }
+  }
+
   async function generate() {
     if (!canGenerate || !media || !settings) return;
 
+    const revision = workspaceRevision.current;
     setFormError("");
     setFolderError("");
     setQueueing(true);
@@ -300,8 +366,9 @@ export default function App() {
         prompt,
         ...settings,
       });
-      rememberFolder(folder);
+      if (revision === workspaceRevision.current) rememberFolder(folder);
     } catch (error) {
+      if (revision !== workspaceRevision.current) return;
       setFolderStatus("error");
       setFolderError("保存目录不可用，请重新选择。");
       setFormError(`无法开始生成：${errorMessage(error)}`);
@@ -366,7 +433,12 @@ export default function App() {
           </div>
         </div>
         <div className="workspace">
-          <section className="composer" aria-labelledby="workspace-title">
+          <section
+            ref={composer}
+            tabIndex={-1}
+            className="composer"
+            aria-labelledby="workspace-title"
+          >
             <section className="source-section" aria-labelledby="input-heading">
               <div className="section-heading">
                 <h2 id="input-heading">选择视频</h2>
@@ -686,10 +758,38 @@ export default function App() {
                 <Icon name="arrow" />
               </button>
             </section>
-            <TaskList queue={queue} />
+            <TaskList queue={queue} onRestore={restoreTask} />
           </div>
         </div>
       </main>
+      <dialog
+        ref={restoreDialog}
+        className="settings-dialog restore-dialog"
+        aria-labelledby="restore-title"
+        aria-describedby="restore-description"
+        onClose={(event) => finishRestore(event.currentTarget)}
+      >
+        <form method="dialog" className="settings-form">
+          <header className="settings-header">
+            <div>
+              <h2 id="restore-title">恢复任务参数？</h2>
+              <p id="restore-description" className="muted">
+                当前工作区的内容将被该任务的参数覆盖。
+              </p>
+            </div>
+          </header>
+          <div className="settings-footer">
+            <div className="actions settings-actions">
+              <button type="submit" value="cancel" autoFocus>
+                取消
+              </button>
+              <button type="submit" value="restore" className="primary">
+                确认恢复
+              </button>
+            </div>
+          </div>
+        </form>
+      </dialog>
     </>
   );
 }

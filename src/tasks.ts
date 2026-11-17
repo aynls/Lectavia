@@ -101,6 +101,11 @@ export class TaskQueue {
     return () => this.#listeners.delete(listener);
   };
 
+  getRequest(taskId: string): TaskRequest | undefined {
+    const job = this.#jobs.get(taskId);
+    return job && structuredClone(job.request);
+  }
+
   enqueue(input: TaskRequest): void {
     const request = structuredClone(input);
     const selected = new Set(request.selectedParts);
