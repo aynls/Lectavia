@@ -208,11 +208,7 @@ function TaskCard({
           {t("task.retry")}
         </button>
       )}
-      <button
-        type="button"
-        className="quiet"
-        onClick={() => onRestore(task.id)}
-      >
+      <button type="button" onClick={() => onRestore(task.id)}>
         {t("task.restore")}
       </button>
     </>
