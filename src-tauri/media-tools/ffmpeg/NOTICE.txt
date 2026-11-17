@@ -1,0 +1,10 @@
+Lectavia runs FFmpeg and FFprobe as separate programs.
+
+FFmpeg (https://ffmpeg.org/) and LAME (https://lame.sourceforge.io/) are
+distributed under the GNU Lesser General Public License, version 2.1 or later.
+See dist/source for the license texts, corresponding source archives, and
+build script for the versions distributed with this application.
+
+FFmpeg includes code based on the work of the Independent JPEG Group.
+The bundled winpthreads runtime is from the mingw-w64 project. Its license is
+included in dist/source/winpthreads-LICENSE.txt.

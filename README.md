@@ -2,6 +2,8 @@
 
 转写 Bilibili、YouTube 或本地视频中的语音，整理为可编辑的 Markdown 或纯文本文稿。
 
+Windows x64 安装包自带 FFmpeg 和 FFprobe，处理本地视频时可以直接使用。在线视频还需要 `yt-dlp`，YouTube 还需要 Deno 或 Node.js 22 及以上。
+
 ## 本地开发
 
 需要 Node.js 24、pnpm、Rust stable 和 [Tauri 2 的系统依赖](https://v2.tauri.app/start/prerequisites/)。Windows 上需要 Visual Studio 的 C++ 桌面开发工具和 WebView2。
@@ -13,7 +15,7 @@ pnpm install
 powershell -ExecutionPolicy Bypass -File scripts/setup-media.ps1
 ```
 
-安装脚本通过 WinGet 安装缺少的媒体工具。也可以把工具放到 PATH，或将 `LECTAVIA_MEDIA_DIR` 指向工具目录。安装后用新的终端启动应用。
+安装脚本通过 WinGet 安装缺少的开发用媒体工具。也可以把工具放到 PATH，或将 `LECTAVIA_MEDIA_DIR` 指向工具目录。安装后用新的终端启动应用。已有随包 FFmpeg 的构建产物时，开发模式也会优先使用它。
 
 ```powershell
 pnpm tauri dev
@@ -32,3 +34,13 @@ pnpm tauri dev
 - `pnpm format` 格式化项目文件，`pnpm format:check` 检查格式。
 - `pnpm build` 检查 TypeScript 并构建前端，`pnpm tauri build` 构建桌面应用。
 - `cargo test --manifest-path src-tauri/Cargo.toml --locked` 运行 Rust 测试。
+
+### Windows x64 安装包
+
+在 [MSYS2](https://www.msys2.org/) 的 UCRT64 终端安装构建工具。
+
+```bash
+pacman -S --needed make diffutils mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-nasm
+```
+
+若 MSYS2 装在 `C:\msys64` 以外，先在运行 `pnpm tauri build` 的 PowerShell 中将 `MSYS2_ROOT` 设为它的安装目录。首次构建会下载并校验 FFmpeg、LAME 源码，然后编译并打包。后续构建复用校验通过的产物。安装包内的 `media-tools/ffmpeg` 提供相应源码、构建脚本和 LGPL 许可文本。

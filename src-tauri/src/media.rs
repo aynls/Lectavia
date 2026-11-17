@@ -88,6 +88,28 @@ fn require_tool(app: &AppHandle, program: &str) -> Result<PathBuf, AppError> {
         .ok_or_else(|| AppError::from("error.missingTool").with("program", program))
 }
 
+fn require_ffmpeg(app: &AppHandle) -> Result<PathBuf, AppError> {
+    #[cfg(all(windows, target_arch = "x86_64"))]
+    {
+        let bundled = app
+            .path()
+            .resource_dir()
+            .ok()
+            .map(|directory| directory.join("media-tools/ffmpeg/dist/bin"));
+        if let Some(directory) = bundled.filter(|path| path.join("ffprobe.exe").is_file()) {
+            let ffmpeg = directory.join("ffmpeg.exe");
+            if ffmpeg.is_file() {
+                return Ok(ffmpeg);
+            }
+        }
+        if !cfg!(debug_assertions) {
+            return Err("error.missingBundledFfmpeg".into());
+        }
+    }
+
+    require_tool(app, "ffmpeg")
+}
+
 fn process_output(command: &mut Command, failure: &'static str) -> Result<Output, AppError> {
     #[cfg(windows)]
     command.creation_flags(0x08000000); // CREATE_NO_WINDOW
@@ -115,7 +137,7 @@ fn process_output(command: &mut Command, failure: &'static str) -> Result<Output
     }
 }
 
-fn yt_dlp(app: &AppHandle, youtube: bool) -> Result<Command, AppError> {
+fn yt_dlp(app: &AppHandle, youtube: bool, ffmpeg: Option<&Path>) -> Result<Command, AppError> {
     let mut command = Command::new(require_tool(app, "yt-dlp")?);
     command.args([
         "--ignore-config",
@@ -130,6 +152,10 @@ fn yt_dlp(app: &AppHandle, youtube: bool) -> Result<Command, AppError> {
         "--extractor-retries",
         "1",
     ]);
+
+    if let Some(ffmpeg) = ffmpeg {
+        command.arg("--ffmpeg-location").arg(ffmpeg);
+    }
 
     if youtube {
         let runtimes: Vec<_> = ["deno", "node"]
@@ -159,7 +185,8 @@ pub async fn probe_remote_video(
 ) -> Result<Value, AppError> {
     let url = platform_url(&url, youtube)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let mut command = yt_dlp(&app, youtube)?;
+        let ffmpeg = require_ffmpeg(&app).ok();
+        let mut command = yt_dlp(&app, youtube, ffmpeg.as_deref())?;
         command.arg("--dump-single-json");
         if flat {
             command.arg("--flat-playlist");
@@ -250,7 +277,7 @@ fn download_audio(
     youtube: bool,
 ) -> Result<PathBuf, AppError> {
     let url = platform_url(url, youtube)?;
-    let mut command = yt_dlp(app, youtube)?;
+    let mut command = yt_dlp(app, youtube, Some(ffmpeg))?;
     if youtube {
         command.arg("--check-formats");
     }
@@ -265,9 +292,7 @@ fn download_audio(
             "bestaudio/best",
             "--output",
             "source.%(ext)s",
-            "--ffmpeg-location",
         ])
-        .arg(ffmpeg)
         .arg("--")
         .arg(url.as_str());
     process_output(&mut command, "error.audioDownload")?;
@@ -288,7 +313,7 @@ fn list_files(directory: &Path) -> Result<Vec<PathBuf>, AppError> {
 }
 
 fn prepare_audio(app: &AppHandle, source: MediaSource) -> Result<AudioChunks, AppError> {
-    let ffmpeg = require_tool(app, "ffmpeg")?;
+    let ffmpeg = require_ffmpeg(app)?;
     let root = media_root(app)?;
     fs::create_dir_all(root.as_path())
         .map_err(|error| AppError::detail("error.audioCacheCreate", error))?;
