@@ -82,6 +82,7 @@ export default function App({
     desktop ? "checking" : "error",
   );
   const [folderError, setFolderError] = useState<Message>();
+  const [usingDefaultFolder, setUsingDefaultFolder] = useState(false);
   const [format, setFormat] = useState<"md" | "txt">("md");
   const [draftInstructions, setDraftInstructions] = useState("");
   const [importedPrompt, setImportedPrompt] = useState<PromptFile | null>(null);
@@ -170,7 +171,7 @@ export default function App({
         if (!active || revision !== workspaceRevision.current) return;
         setFolder(path);
         setFolderStatus("ready");
-        setFolderError(undefined);
+        setUsingDefaultFolder(Boolean(previous));
         rememberFolder(path);
       } catch {
         if (!active || revision !== workspaceRevision.current) return;
@@ -286,8 +287,6 @@ export default function App({
 
   async function chooseFolder() {
     const revision = workspaceRevision.current;
-    setFormError(undefined);
-    setFolderError(undefined);
     try {
       const path = await open({
         title: t("output.chooseDialog"),
@@ -297,23 +296,25 @@ export default function App({
       });
       if (!path || revision !== workspaceRevision.current) return;
 
+      setFormError(undefined);
+      setFolderError(undefined);
       setFolderStatus("checking");
       try {
         await invoke("validate_output_directory", { directory: path });
         if (revision !== workspaceRevision.current) return;
         setFolder(path);
         setFolderStatus("ready");
+        setUsingDefaultFolder(false);
         rememberFolder(path);
       } catch (error) {
         if (revision !== workspaceRevision.current) return;
-        setFolderStatus(folder ? "ready" : "error");
+        setFolderStatus(folderStatus);
         setFolderError(
           message("error.chooseAnotherFolder", { cause: errorMessage(error) }),
         );
       }
     } catch {
       if (revision !== workspaceRevision.current) return;
-      setFolderStatus(folder ? "ready" : "error");
       setFolderError(message("error.openFolderDialog"));
     }
   }
@@ -395,6 +396,7 @@ export default function App({
     setFolder(request.outputDirectory);
     setFolderStatus("ready");
     setFolderError(undefined);
+    setUsingDefaultFolder(false);
     setFormat(request.format);
     setSettings({ asr: request.asr, llm: request.llm });
     setFormError(undefined);
@@ -853,31 +855,49 @@ export default function App({
                     )}
                   </div>
                   <div className="options">
-                    <div className="option">
-                      <span className="option-label">
+                    <div
+                      className="option"
+                      role="group"
+                      aria-labelledby="output-folder-label"
+                    >
+                      <span className="option-label" id="output-folder-label">
                         {t("output.location")}
                       </span>
-                      <button
-                        type="button"
-                        className="directory-choice"
-                        aria-label={
-                          folder
-                            ? t("output.changeLocation", { folder })
-                            : t("output.chooseLocation")
-                        }
-                        title={folder || undefined}
-                        onClick={chooseFolder}
-                        disabled={!desktop}
-                      >
-                        <Icon name="folder" />
-                        <span>
-                          {folder ||
-                            (folderStatus === "checking"
-                              ? t("output.preparingFolder")
-                              : t("output.chooseFolder"))}
-                        </span>
-                        <Icon name="down" />
-                      </button>
+                      <div className="directory-choice">
+                        {folder && (
+                          <p
+                            className="directory-path"
+                            id="output-folder-path"
+                            title={folder}
+                          >
+                            <Icon name="folder" />
+                            <span>{folder}</span>
+                          </p>
+                        )}
+                        <button
+                          type="button"
+                          aria-describedby={
+                            folder ? "output-folder-path" : undefined
+                          }
+                          onClick={chooseFolder}
+                          disabled={!desktop || folderStatus === "checking"}
+                        >
+                          {t(
+                            folderStatus === "checking"
+                              ? folder
+                                ? "output.checkingFolder"
+                                : "output.preparingFolder"
+                              : folder
+                                ? "output.changeLocation"
+                                : "output.chooseFolder",
+                          )}
+                        </button>
+                      </div>
+                      {usingDefaultFolder && folderStatus === "ready" && (
+                        <p className="muted field-error" role="status">
+                          {t("output.usingDefaultFolder")}
+                        </p>
+                      )}
                       {folderError && (
                         <p className="error field-error" role="alert">
                           {renderMessage(t, folderError)}
