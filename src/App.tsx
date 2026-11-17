@@ -1,6 +1,7 @@
 import { useRef, useState, type SubmitEvent } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { Icon } from "./Icon";
 import { inspectMedia, type MediaInfo } from "./media";
 import { defaultModelSettings, ModelSettings } from "./ModelSettings";
 import { validateModelConnection } from "./models";
@@ -167,153 +168,225 @@ export default function App() {
   }
 
   return (
-    <main>
-      <header className="app-header">
-        <h1>Lectavia</h1>
-        <ModelSettings
-          value={settings}
-          onSave={(next) => {
-            setSettings(next);
-            setFormError("");
-          }}
-        />
+    <>
+      <header className="top-bar">
+        <div className="app-width app-header">
+          <div className="brand">
+            <span className="brand-mark">
+              <Icon name="book" />
+            </span>
+            Lectavia
+          </div>
+          <ModelSettings
+            value={settings}
+            onSave={(next) => {
+              setSettings(next);
+              setFormError("");
+            }}
+          />
+        </div>
       </header>
-      {!desktop && <p className="notice">请在 Lectavia 桌面应用中处理视频。</p>}
-      <div className="workspace">
-        <section className="panel" aria-labelledby="input-heading">
-          <h2 id="input-heading">添加视频</h2>
-          <form onSubmit={submitLink}>
-            <label htmlFor="video-url">视频链接</label>
-            <div className="link-row">
-              <input
-                id="video-url"
-                name="video-url"
-                type="url"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                placeholder="Bilibili 或 YouTube 链接"
-                value={link}
-                disabled={!desktop}
-                onBlur={() => previewLink(link)}
-                onChange={(event) => {
-                  setLink(event.target.value);
-                  clearPreview();
-                }}
-              />
-              <button type="submit" disabled={!desktop || !link.trim()}>
-                读取链接
-              </button>
-            </div>
-          </form>
-          <button type="button" onClick={chooseVideo} disabled={!desktop}>
-            选择本地视频
-          </button>
-          {previewing && (
-            <p className="muted" role="status">
-              正在读取视频信息…
-            </p>
-          )}
-          {sourceError && (
-            <p className="error" role="alert">
-              {sourceError}
-            </p>
-          )}
-          {media && (
-            <div className="media">
-              <div className="media-heading">
-                {media.thumbnail && (
-                  <img
-                    src={media.thumbnail}
-                    alt=""
-                    referrerPolicy="no-referrer"
-                  />
-                )}
-                <div>
-                  <h3>{media.title}</h3>
-                  {media.uploader && <p className="muted">{media.uploader}</p>}
-                </div>
-              </div>
-              {media.multipart && (
-                <fieldset className="parts">
-                  <legend>选择分 P</legend>
-                  {media.parts.map((part) => (
-                    <label className="checkbox" key={part.id}>
-                      <input
-                        type="checkbox"
-                        checked={selectedParts.includes(part.id)}
-                        onChange={(event) => {
-                          const checked = event.target.checked;
-                          setSelectedParts((current) =>
-                            checked
-                              ? [...current, part.id]
-                              : current.filter((id) => id !== part.id),
-                          );
-                        }}
-                      />
-                      {part.number ? `P${part.number} · ` : ""}
-                      {part.title}
-                    </label>
-                  ))}
-                </fieldset>
-              )}
-            </div>
-          )}
-
-          <div className="options">
-            <div className="option">
-              <span>输出目录</span>
-              <button type="button" onClick={chooseFolder} disabled={!desktop}>
-                {folder ? "更改目录" : "选择目录"}
-              </button>
-              {folder && <p className="file-path">{folder}</p>}
-            </div>
-            <div className="option">
-              <label htmlFor="output-format">输出格式</label>
-              <select
-                id="output-format"
-                value={format}
-                onChange={(event) =>
-                  setFormat(event.target.value === "txt" ? "txt" : "md")
-                }
-              >
-                <option value="md">Markdown (.md)</option>
-                <option value="txt">纯文本 (.txt)</option>
-              </select>
-            </div>
-            <div className="option">
-              <span>
-                自定义整理要求 <small>可选</small>
-              </span>
-              <button type="button" onClick={choosePrompt} disabled={!desktop}>
-                {prompt ? "更换 Markdown" : "选择 Markdown"}
-              </button>
-              {prompt && (
-                <div className="actions file-path">
-                  <span>{prompt.name}</span>
-                  <button type="button" onClick={() => setPrompt(null)}>
-                    移除
+      <main className="app-width">
+        <div className="workspace-title">
+          <h1>从视频生成学习资料</h1>
+          <p>导入 Bilibili、YouTube 或本地视频，将讲解整理为本地文档。</p>
+        </div>
+        {!desktop && (
+          <p className="notice">请在 Lectavia 桌面应用中处理视频。</p>
+        )}
+        <div className="workspace">
+          <section className="panel composer" aria-label="生成学习资料">
+            <section
+              className="composer-section"
+              aria-labelledby="input-heading"
+            >
+              <h2 id="input-heading">
+                <Icon name="video" />
+                视频来源
+              </h2>
+              <form onSubmit={submitLink}>
+                <label className="sr-only" htmlFor="video-url">
+                  视频链接
+                </label>
+                <div className="link-row">
+                  <div className="link-field">
+                    <Icon name="link" />
+                    <input
+                      id="video-url"
+                      name="video-url"
+                      type="url"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      placeholder="粘贴视频链接"
+                      value={link}
+                      disabled={!desktop}
+                      onBlur={() => previewLink(link)}
+                      onChange={(event) => {
+                        setLink(event.target.value);
+                        clearPreview();
+                      }}
+                    />
+                  </div>
+                  <button type="submit" disabled={!desktop || !link.trim()}>
+                    读取链接
                   </button>
                 </div>
+              </form>
+              <button
+                type="button"
+                className="quiet local-video"
+                onClick={chooseVideo}
+                disabled={!desktop}
+              >
+                <Icon name="folder" />
+                选择本地视频
+              </button>
+              {previewing && (
+                <p className="muted" role="status">
+                  正在读取视频信息…
+                </p>
               )}
+              {sourceError && (
+                <p className="error" role="alert">
+                  {sourceError}
+                </p>
+              )}
+              {media && (
+                <div className="media enter">
+                  <div className="media-heading">
+                    {media.thumbnail && (
+                      <img
+                        src={media.thumbnail}
+                        alt=""
+                        referrerPolicy="no-referrer"
+                      />
+                    )}
+                    <div>
+                      <h3>{media.title}</h3>
+                      {media.uploader && (
+                        <p className="muted">{media.uploader}</p>
+                      )}
+                    </div>
+                  </div>
+                  {media.multipart && (
+                    <fieldset className="parts">
+                      <legend>选择分 P</legend>
+                      {media.parts.map((part) => (
+                        <label className="checkbox" key={part.id}>
+                          <input
+                            type="checkbox"
+                            checked={selectedParts.includes(part.id)}
+                            onChange={(event) => {
+                              const checked = event.target.checked;
+                              setSelectedParts((current) =>
+                                checked
+                                  ? [...current, part.id]
+                                  : current.filter((id) => id !== part.id),
+                              );
+                            }}
+                          />
+                          {part.number ? `P${part.number} · ` : ""}
+                          {part.title}
+                        </label>
+                      ))}
+                    </fieldset>
+                  )}
+                </div>
+              )}
+            </section>
+            <section
+              className="composer-section"
+              aria-labelledby="output-heading"
+            >
+              <h2 id="output-heading">
+                <Icon name="folder" />
+                保存设置
+              </h2>
+              <div className="options">
+                <div className="option">
+                  <div className="option-label">
+                    <span>保存位置</span>
+                    {folder && (
+                      <p className="file-path" title={folder}>
+                        {folder}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={chooseFolder}
+                    disabled={!desktop}
+                  >
+                    {folder ? "更改目录" : "选择目录"}
+                  </button>
+                </div>
+                <div className="option">
+                  <label htmlFor="output-format">输出格式</label>
+                  <select
+                    id="output-format"
+                    value={format}
+                    onChange={(event) =>
+                      setFormat(event.target.value === "txt" ? "txt" : "md")
+                    }
+                  >
+                    <option value="md">Markdown (.md)</option>
+                    <option value="txt">纯文本 (.txt)</option>
+                  </select>
+                </div>
+              </div>
+              <details className="advanced">
+                <summary>
+                  <Icon name="down" />
+                  自定义整理要求 <small>可选</small>
+                </summary>
+                <div className="advanced-content">
+                  {prompt && (
+                    <p className="file-path" title={prompt.name}>
+                      {prompt.name}
+                    </p>
+                  )}
+                  <div className="actions">
+                    <button
+                      type="button"
+                      onClick={choosePrompt}
+                      disabled={!desktop}
+                    >
+                      {prompt ? "更换文件" : "选择 Markdown 文件"}
+                    </button>
+                    {prompt && (
+                      <button
+                        type="button"
+                        className="quiet"
+                        onClick={() => setPrompt(null)}
+                      >
+                        移除
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </details>
+            </section>
+            <div className="composer-footer">
+              {formError && (
+                <p className="error" role="alert">
+                  {formError}
+                </p>
+              )}
+              <button
+                type="button"
+                className="primary generate"
+                disabled={!desktop || previewing}
+                onClick={generate}
+              >
+                生成学习资料
+                <Icon name="arrow" />
+              </button>
             </div>
-          </div>
-          {formError && (
-            <p className="error" role="alert">
-              {formError}
-            </p>
-          )}
-          <button
-            type="button"
-            className="primary generate"
-            disabled={!desktop || previewing}
-            onClick={generate}
-          >
-            生成学习资料
-          </button>
-        </section>
-        <TaskList queue={queue} />
-      </div>
-    </main>
+          </section>
+          <TaskList queue={queue} />
+        </div>
+      </main>
+    </>
   );
 }
