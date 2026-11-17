@@ -1,5 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
+  errorMessage,
+  message,
+  redactMessage,
+  translator,
+  type Locale,
+  type Message,
+} from "./i18n";
+import {
   prepareAudio,
   removeAudio,
   type MediaInfo,
@@ -26,6 +34,7 @@ export interface TaskRequest {
   media: MediaInfo;
   selectedParts: string[];
   outputDirectory: string;
+  locale: Locale;
   format: OutputFormat;
   instructions: string;
   prompt: PromptFile | null;
@@ -35,11 +44,11 @@ export interface TaskRequest {
 
 export interface TaskPart {
   readonly id: string;
-  readonly title: string;
+  readonly title?: string;
   readonly number?: number;
   readonly status: PartStatus;
   readonly phase?: Phase;
-  readonly error?: string;
+  readonly error?: Message;
   readonly outputPath?: string;
 }
 
@@ -50,7 +59,7 @@ export interface Task {
   readonly parts: readonly TaskPart[];
   readonly outputs: readonly string[];
   readonly outputDirectory?: string;
-  readonly error?: string;
+  readonly error?: Message;
 }
 
 interface QueuedPart {
@@ -66,18 +75,11 @@ interface Job {
   instructions?: string;
 }
 
-function failureMessage(error: unknown, job: Job): string {
-  const message =
-    typeof error === "string"
-      ? error
-      : error instanceof Error
-        ? error.message
-        : "任务处理失败。";
-
-  return [job.request.asr.apiKey, job.request.llm.apiKey].reduce(
-    (detail, key) => (key ? detail.replaceAll(key, "[已隐藏]") : detail),
-    message,
-  );
+function failureMessage(error: unknown, job: Job): Message {
+  return redactMessage(errorMessage(error, "error.taskFailed"), [
+    job.request.asr.apiKey,
+    job.request.llm.apiKey,
+  ]);
 }
 
 export function revealOutput(
@@ -124,8 +126,8 @@ export class TaskQueue {
       ];
     });
 
-    if (parts.length === 0) throw new Error("请至少选择一个视频分段。");
-    if (!request.outputDirectory) throw new Error("请选择保存目录。");
+    if (parts.length === 0) throw message("error.noPartSelected");
+    if (!request.outputDirectory) throw message("error.noFolderSelected");
 
     const task: Task = {
       id: crypto.randomUUID(),
@@ -228,6 +230,7 @@ export class TaskQueue {
         const directory = await invoke<string>("create_output_directory", {
           directory: outputDirectory,
           title: job.task.title,
+          fallbackTitle: translator(job.request.locale)("output.fallbackTitle"),
         });
         this.update(job, { outputDirectory: directory });
       } catch (error) {
@@ -255,8 +258,14 @@ export class TaskQueue {
   }
 
   private async runPart(job: Job, index: number): Promise<void> {
-    const { asr, llm, format, outputDirectory, media } = job.request;
+    const { asr, llm, format, outputDirectory, media, locale } = job.request;
     const part = job.parts[index];
+    const t = translator(locale);
+    const partTitle =
+      part.media.title ??
+      (part.media.number
+        ? t("media.part", { number: part.media.number })
+        : job.task.title);
     const setPhase = (phase: Phase) =>
       this.updatePart(job, index, { status: "running", phase });
 
@@ -278,7 +287,8 @@ export class TaskQueue {
         setPhase("organization");
         part.material = await organizeTranscript(part.transcript, {
           connection: llm,
-          title: part.media.title || job.task.title,
+          locale,
+          title: partTitle,
           format,
           instructions: job.instructions,
         });
@@ -288,7 +298,11 @@ export class TaskQueue {
       setPhase("output");
       const outputPath = await invoke<string>("write_output", {
         directory: job.task.outputDirectory ?? outputDirectory,
-        title: media.multipart ? part.media.title : job.task.title,
+        title: media.multipart ? partTitle : job.task.title,
+        labels: {
+          fallbackTitle: t("output.fallbackTitle"),
+          documentSuffix: t("output.suffix"),
+        },
         format,
         content: part.material,
         partIndex: part.media.number,

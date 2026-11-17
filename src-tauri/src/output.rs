@@ -4,12 +4,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::error::AppError;
+use serde::Deserialize;
 use tauri_plugin_opener::OpenerExt;
 use tempfile::NamedTempFile;
 
 const MAX_TITLE_UNITS: usize = 100;
 
-fn safe_title(title: &str) -> String {
+fn safe_title(title: &str) -> Option<String> {
     let mut name = String::new();
     let mut units = 0;
 
@@ -33,7 +35,7 @@ fn safe_title(title: &str) -> String {
 
     let name = name.trim_end_matches([' ', '.']);
     if name.is_empty() {
-        return "视频".into();
+        return None;
     }
 
     let device = name
@@ -58,39 +60,47 @@ fn safe_title(title: &str) -> String {
             "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
         )
     {
-        format!("_{name}")
+        Some(format!("_{name}"))
     } else {
-        name.into()
+        Some(name.into())
     }
 }
 
-fn selected_directory(path: &str) -> Result<&Path, String> {
+fn output_title(title: &str, fallback: &str) -> String {
+    safe_title(title)
+        .or_else(|| safe_title(fallback))
+        .unwrap_or_else(|| "Lectavia".into())
+}
+
+fn selected_directory(path: &str) -> Result<&Path, AppError> {
     let directory = Path::new(path);
     if directory.is_absolute() && directory.is_dir() {
         Ok(directory)
     } else {
-        Err("保存目录不存在或无法访问。".into())
+        Err("error.folderInvalid".into())
     }
 }
 
 #[tauri::command]
-pub async fn default_output_directory(app: tauri::AppHandle) -> Result<String, String> {
+pub async fn default_output_directory(app: tauri::AppHandle) -> Result<String, AppError> {
     use tauri::Manager;
 
     let base = app
         .path()
         .document_dir()
         .or_else(|_| app.path().home_dir())
-        .map_err(|error| format!("无法找到默认保存位置：{error}"))?;
+        .map_err(|error| AppError::detail("error.defaultFolderLocation", error))?;
     let directory = base.join("Lectavia");
-    fs::create_dir_all(&directory).map_err(|error| format!("无法创建默认保存目录：{error}"))?;
+    fs::create_dir_all(&directory)
+        .map_err(|error| AppError::detail("error.defaultFolderCreate", error))?;
     validate_output_directory(directory.to_string_lossy().into_owned()).await
 }
 
 #[tauri::command]
-pub async fn validate_output_directory(directory: String) -> Result<String, String> {
+pub async fn validate_output_directory(directory: String) -> Result<String, AppError> {
     let directory = selected_directory(&directory)?;
-    NamedTempFile::new_in(directory).map_err(|error| format!("保存目录不可写：{error}"))?;
+    NamedTempFile::new_in(directory)
+        .map_err(|error| AppError::detail("error.folderNotWritable", error))?;
     Ok(directory.to_string_lossy().into_owned())
 }
 
@@ -108,9 +118,13 @@ fn already_present(error: &io::Error, path: &Path) -> bool {
 }
 
 #[tauri::command]
-pub async fn create_output_directory(directory: String, title: String) -> Result<String, String> {
+pub async fn create_output_directory(
+    directory: String,
+    title: String,
+    fallback_title: String,
+) -> Result<String, AppError> {
     let directory = selected_directory(&directory)?;
-    let title = safe_title(&title);
+    let title = output_title(&title, &fallback_title);
     let mut number = 1;
 
     loop {
@@ -118,9 +132,16 @@ pub async fn create_output_directory(directory: String, title: String) -> Result
         match fs::create_dir(&path) {
             Ok(()) => return Ok(path.to_string_lossy().into_owned()),
             Err(error) if already_present(&error, &path) => number += 1,
-            Err(error) => return Err(format!("无法创建保存文件夹：{error}")),
+            Err(error) => return Err(AppError::detail("error.folderCreate", error)),
         }
     }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutputLabels {
+    fallback_title: String,
+    document_suffix: String,
 }
 
 #[tauri::command]
@@ -130,30 +151,32 @@ pub async fn write_output(
     format: String,
     content: String,
     part_index: Option<u32>,
-) -> Result<String, String> {
+    labels: OutputLabels,
+) -> Result<String, AppError> {
     let directory = selected_directory(&directory)?;
     let extension = match format.as_str() {
         "md" => ".md",
         "txt" => ".txt",
-        _ => return Err("输出格式必须是 Markdown 或纯文本。".into()),
+        _ => return Err("error.outputFormat".into()),
     };
     if content.trim().is_empty() {
-        return Err("整理结果为空，无法保存。".into());
+        return Err("error.emptyOutput".into());
     }
 
-    let title = safe_title(&title);
+    let title = output_title(&title, &labels.fallback_title);
+    let suffix = output_title(&labels.document_suffix, &labels.fallback_title);
     let stem = match part_index {
-        Some(number) => format!("P{number:02}-{title}-文稿"),
-        None => format!("{title}-文稿"),
+        Some(number) => format!("P{number:02}-{title}-{suffix}"),
+        None => format!("{title}-{suffix}"),
     };
 
     // Finish writing beside the final file before publishing it without replacing existing files.
     let mut pending = NamedTempFile::new_in(directory)
-        .map_err(|error| format!("无法在保存目录内创建临时文件：{error}"))?;
+        .map_err(|error| AppError::detail("error.outputTemp", error))?;
     pending
         .write_all(content.as_bytes())
         .and_then(|()| pending.as_file().sync_all())
-        .map_err(|error| format!("无法写入文稿：{error}"))?;
+        .map_err(|error| AppError::detail("error.outputWrite", error))?;
 
     let mut number = 1;
     loop {
@@ -164,7 +187,7 @@ pub async fn write_output(
                 pending = error.file;
                 number += 1;
             }
-            Err(error) => return Err(format!("无法保存文稿：{}", error.error)),
+            Err(error) => return Err(AppError::detail("error.outputSave", error.error)),
         }
     }
 }
@@ -174,7 +197,7 @@ pub async fn reveal_output(
     app: tauri::AppHandle,
     path: String,
     is_directory: bool,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let target = Path::new(&path);
     if !target.is_absolute()
         || !(if is_directory {
@@ -183,7 +206,7 @@ pub async fn reveal_output(
             target.is_file()
         })
     {
-        return Err("生成的文件或文件夹已不存在。".into());
+        return Err("error.outputGone".into());
     }
 
     let opener = app.opener();
@@ -193,7 +216,7 @@ pub async fn reveal_output(
         opener.reveal_item_in_dir(target)
     };
 
-    result.map_err(|error| format!("无法打开文件位置：{error}"))
+    result.map_err(|error| AppError::detail("error.outputReveal", error))
 }
 
 #[cfg(test)]
@@ -202,12 +225,14 @@ mod tests {
 
     #[test]
     fn sanitizes_reserved_and_long_windows_names() {
-        assert_eq!(safe_title(" coN.资料 "), "_coN.资料");
-        assert_eq!(safe_title("LPT²"), "_LPT²");
-        assert_eq!(safe_title("课程/中文:提纲?."), "课程_中文_提纲_");
-        assert_eq!(safe_title("..."), "视频");
+        assert_eq!(output_title(" coN.资料 ", "视频"), "_coN.资料");
+        assert_eq!(output_title("LPT²", "视频"), "_LPT²");
+        assert_eq!(output_title("课程/中文:提纲?.", "视频"), "课程_中文_提纲_");
+        assert_eq!(output_title("...", "视频"), "视频");
         assert_eq!(
-            safe_title(&"📝".repeat(100)).encode_utf16().count(),
+            output_title(&"📝".repeat(100), "视频")
+                .encode_utf16()
+                .count(),
             MAX_TITLE_UNITS
         );
     }
@@ -233,10 +258,14 @@ mod tests {
             let root = tempfile::tempdir().unwrap();
             let directory = root.path().to_string_lossy().into_owned();
             let title = "课程".to_owned();
-            let folder = create_output_directory(directory.clone(), title.clone())
+            let labels = || OutputLabels {
+                fallback_title: "视频".into(),
+                document_suffix: "文稿".into(),
+            };
+            let folder = create_output_directory(directory.clone(), title.clone(), "视频".into())
                 .await
                 .unwrap();
-            let second = create_output_directory(directory, title.clone())
+            let second = create_output_directory(directory, title.clone(), "视频".into())
                 .await
                 .unwrap();
             assert!(second.ends_with("课程 (2)"));
@@ -246,12 +275,14 @@ mod tests {
                 "md".into(),
                 "初稿".into(),
                 Some(2),
+                labels(),
             )
             .await
             .unwrap();
-            let second_file = write_output(folder, title, "md".into(), "新稿".into(), Some(2))
-                .await
-                .unwrap();
+            let second_file =
+                write_output(folder, title, "md".into(), "新稿".into(), Some(2), labels())
+                    .await
+                    .unwrap();
             assert!(first_file.ends_with("P02-课程-文稿.md"));
             assert!(second_file.ends_with("P02-课程-文稿 (2).md"));
             assert_eq!(fs::read_to_string(first_file).unwrap(), "初稿");

@@ -4,13 +4,14 @@ use std::{
     time::Duration,
 };
 
+use crate::error::AppError;
 use reqwest::{
     Client, StatusCode, Url,
     multipart::{Form, Part},
     redirect::Policy,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use tauri::{AppHandle, Manager};
 use tokio::fs::{self, File};
 
@@ -18,7 +19,7 @@ const MAX_AUDIO_BYTES: u64 = 25_000_000;
 
 static CLIENT: OnceLock<Result<Client, reqwest::Error>> = OnceLock::new();
 
-fn client() -> Result<&'static Client, String> {
+fn client() -> Result<&'static Client, AppError> {
     CLIENT
         .get_or_init(|| {
             Client::builder()
@@ -27,11 +28,11 @@ fn client() -> Result<&'static Client, String> {
                 .build()
         })
         .as_ref()
-        .map_err(|_| "无法初始化模型服务的网络连接。".into())
+        .map_err(|_| "error.modelNetworkInit".into())
 }
 
-fn endpoint(base_url: &str, route: &str) -> Result<Url, String> {
-    let mut url = Url::parse(base_url.trim()).map_err(|_| "API Base URL 无效。")?;
+fn endpoint(base_url: &str, route: &str) -> Result<Url, AppError> {
+    let mut url = Url::parse(base_url.trim()).map_err(|_| "error.baseUrl")?;
     let is_local = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
     if !(url.scheme() == "https" || (url.scheme() == "http" && is_local))
         || url.host_str().is_none()
@@ -40,7 +41,7 @@ fn endpoint(base_url: &str, route: &str) -> Result<Url, String> {
         || url.query().is_some()
         || url.fragment().is_some()
     {
-        return Err("请输入有效的 API Base URL。外部服务请使用 HTTPS。".into());
+        return Err("error.baseUrl".into());
     }
 
     let path = url.path().trim_end_matches('/');
@@ -48,40 +49,37 @@ fn endpoint(base_url: &str, route: &str) -> Result<Url, String> {
         .iter()
         .any(|route| path.ends_with(route))
     {
-        return Err(
-            "请输入 API Base URL，去掉 /models、/audio/transcriptions 或 /chat/completions。"
-                .into(),
-        );
+        return Err("error.baseUrlHasRoute".into());
     }
 
     url.set_path(&format!("{path}/{route}"));
     Ok(url)
 }
 
-fn credentials<'a>(api_key: &'a str, model: &'a str) -> Result<(&'a str, &'a str), String> {
+fn credentials<'a>(api_key: &'a str, model: &'a str) -> Result<(&'a str, &'a str), AppError> {
     let api_key = api_key.trim();
     let model = model.trim();
     if api_key.is_empty() || model.is_empty() {
-        return Err("请填写 API Key 和模型 ID。".into());
+        return Err("error.credentials".into());
     }
     Ok((api_key, model))
 }
 
-async fn checked_audio(app: &AppHandle, path: &Path) -> Result<File, String> {
+async fn checked_audio(app: &AppHandle, path: &Path) -> Result<File, AppError> {
     let cache = app
         .path()
         .app_cache_dir()
-        .map_err(|_| "无法确定 Lectavia 的缓存目录。")?;
+        .map_err(|_| "error.cacheLocation")?;
     let media = fs::canonicalize(cache)
         .await
-        .map_err(|_| "无法访问 Lectavia 的缓存目录。")?
+        .map_err(|_| "error.cacheAccess")?
         .join("media");
     let path = fs::canonicalize(path)
         .await
-        .map_err(|_| "找不到待转写的音频分片。")?;
+        .map_err(|_| "error.audioChunkMissing")?;
     let relative = path
         .strip_prefix(&media)
-        .map_err(|_| "只允许转写 Lectavia 已准备的音频分片。")?;
+        .map_err(|_| "error.audioChunkRestricted")?;
 
     let mut parts = relative.components();
     if let (Some(Component::Normal(directory)), Some(Component::Normal(name)), None) =
@@ -101,46 +99,50 @@ async fn checked_audio(app: &AppHandle, path: &Path) -> Result<File, String> {
         if audio_dir && audio_name {
             return File::open(path)
                 .await
-                .map_err(|_| "无法打开待转写的音频分片。".into());
+                .map_err(|_| "error.audioChunkOpen".into());
         }
     }
 
-    Err("只允许转写 Lectavia 已准备的音频分片。".into())
+    Err("error.audioChunkRestricted".into())
 }
 
-async fn send_json(request: reqwest::RequestBuilder, task: &str) -> Result<Value, String> {
+async fn send_json(
+    request: reqwest::RequestBuilder,
+    task: &'static str,
+) -> Result<Value, AppError> {
+    let provider_error =
+        |key: &'static str| AppError::from(key).with("task", json!({ "key": task }));
     let response = request.send().await.map_err(|error| {
         if error.is_timeout() {
-            format!("{task}请求超时，请稍后重试。")
+            provider_error("error.providerTimeout")
         } else {
-            format!("{task}无法连接到模型供应商，请检查 Base URL 和网络连接。")
+            provider_error("error.providerConnect")
         }
     })?;
     let status = response.status();
     if !status.is_success() {
         let reason = match status {
-            StatusCode::BAD_REQUEST => "请检查模型、输入格式和供应商要求。",
-            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => "请检查 API Key 和模型权限。",
-            StatusCode::NOT_FOUND => "请检查 Base URL 和模型 ID。",
-            StatusCode::PAYMENT_REQUIRED => "请检查供应商账户额度。",
-            StatusCode::PAYLOAD_TOO_LARGE => "输入超出了模型供应商的大小限制。",
-            StatusCode::TOO_MANY_REQUESTS => "请求过快或额度不足，请稍后重试或检查账户额度。",
-            _ if status.is_redirection() => "请填写供应商最终提供服务的 API Base URL。",
-            _ if status.is_server_error() => "模型供应商暂时不可用，请稍后重试。",
-            _ => "请检查模型供应商的服务状态或配置。",
+            StatusCode::BAD_REQUEST => "error.httpBadRequest",
+            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => "error.httpAccess",
+            StatusCode::NOT_FOUND => "error.httpNotFound",
+            StatusCode::PAYMENT_REQUIRED => "error.httpPayment",
+            StatusCode::PAYLOAD_TOO_LARGE => "error.httpLarge",
+            StatusCode::TOO_MANY_REQUESTS => "error.httpRate",
+            _ if status.is_redirection() => "error.httpRedirect",
+            _ if status.is_server_error() => "error.httpServer",
+            _ => "error.httpOther",
         };
-        return Err(format!(
-            "{task}请求失败（HTTP {}）。{reason}",
-            status.as_u16()
-        ));
+        return Err(provider_error("error.providerHttp")
+            .with("status", status.as_u16())
+            .with("reason", json!({ "key": reason })));
     }
     response.json().await.map_err(|error| {
         if error.is_timeout() {
-            format!("{task}响应超时，请稍后重试。")
+            provider_error("error.providerResponseTimeout")
         } else if error.is_decode() {
-            format!("{task}接口返回了无效的 JSON。")
+            provider_error("error.providerJson")
         } else {
-            format!("{task}响应读取失败，请稍后重试。")
+            provider_error("error.providerResponse")
         }
     })
 }
@@ -150,7 +152,7 @@ pub async fn list_models(
     base_url: String,
     api_key: String,
     transcription: bool,
-) -> Result<Value, String> {
+) -> Result<Value, AppError> {
     let mut url = endpoint(&base_url, "models")?;
     if transcription {
         url.query_pairs_mut()
@@ -158,14 +160,14 @@ pub async fn list_models(
     }
     let api_key = api_key.trim();
     if api_key.is_empty() {
-        return Err("请填写 API Key。".into());
+        return Err("error.apiKey".into());
     }
     send_json(
         client()?
             .get(url)
             .timeout(Duration::from_secs(30))
             .bearer_auth(api_key),
-        "获取模型列表",
+        "model.providerCatalog",
     )
     .await
 }
@@ -177,26 +179,26 @@ pub async fn transcribe_audio_chunk(
     api_key: String,
     model: String,
     path: String,
-) -> Result<Value, String> {
+) -> Result<Value, AppError> {
     let url = endpoint(&base_url, "audio/transcriptions")?;
     let (api_key, model) = credentials(&api_key, &model)?;
     let audio = checked_audio(&app, Path::new(&path)).await?;
     let metadata = audio
         .metadata()
         .await
-        .map_err(|_| "无法读取音频分片信息。")?;
+        .map_err(|_| "error.audioChunkMetadata")?;
 
     if !metadata.is_file() || metadata.len() == 0 {
-        return Err("音频分片为空或无法读取。".into());
+        return Err("error.audioChunkEmpty".into());
     }
     if metadata.len() > MAX_AUDIO_BYTES {
-        return Err("音频分片超过 25 MB，请尝试重新处理视频。".into());
+        return Err("error.audioChunkTooLarge".into());
     }
 
     let part = Part::stream_with_length(audio, metadata.len())
         .file_name("chunk.mp3")
         .mime_str("audio/mpeg")
-        .map_err(|_| "无法构造音频转写请求。")?;
+        .map_err(|_| "error.audioRequest")?;
     let form = Form::new()
         .text("model", model.to_owned())
         .part("file", part);
@@ -206,7 +208,7 @@ pub async fn transcribe_audio_chunk(
             .timeout(Duration::from_secs(90))
             .bearer_auth(api_key)
             .multipart(form),
-        "语音转写",
+        "model.purpose.asr",
     )
     .await
 }
@@ -239,7 +241,7 @@ pub async fn complete_text(
     model: String,
     messages: Vec<ChatMessage>,
     reasoning_effort: Option<String>,
-) -> Result<Value, String> {
+) -> Result<Value, AppError> {
     let url = endpoint(&base_url, "chat/completions")?;
     let (api_key, model) = credentials(&api_key, &model)?;
     let body = ChatRequest {
@@ -253,7 +255,7 @@ pub async fn complete_text(
             .timeout(Duration::from_secs(180))
             .bearer_auth(api_key)
             .json(&body),
-        "文稿整理",
+        "model.purpose.llm",
     )
     .await
 }

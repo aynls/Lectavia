@@ -1,33 +1,11 @@
 import { useRef, useState, useSyncExternalStore } from "react";
+import { useTranslation } from "react-i18next";
 import { Icon } from "./Icon";
-import {
-  revealOutput,
-  type Task,
-  type TaskPart,
-  type TaskQueue,
-} from "./tasks";
+import { errorMessage, renderMessage, type Message } from "./i18n";
+import { partLabel } from "./media";
+import { revealOutput, type Task, type TaskQueue } from "./tasks";
 
-const statusLabels = {
-  queued: "排队中",
-  running: "处理中",
-  completed: "已完成",
-  failed: "失败",
-  partial: "部分完成",
-};
-
-const phases = [
-  { id: "audio", label: "提取音轨" },
-  { id: "transcription", label: "语音转写" },
-  { id: "organization", label: "整理文稿" },
-  { id: "output", label: "保存文件" },
-] as const;
-
-function partStatus(part: TaskPart) {
-  return (
-    phases.find((phase) => phase.id === part.phase && part.status === "running")
-      ?.label ?? statusLabels[part.status]
-  );
-}
+const phases = ["audio", "transcription", "organization", "output"] as const;
 
 function TaskCard({
   task,
@@ -38,8 +16,9 @@ function TaskCard({
   queue: TaskQueue;
   onRestore: (taskId: string) => void;
 }) {
+  const { t } = useTranslation();
   const title = useRef<HTMLHeadingElement>(null);
-  const [revealError, setRevealError] = useState("");
+  const [revealError, setRevealError] = useState<Message>();
   const [revealing, setRevealing] = useState(false);
   const path = task.outputs.length
     ? (task.outputDirectory ?? task.outputs[0])
@@ -49,19 +28,20 @@ function TaskCard({
     (part) => part.status === "running",
   );
   const running = task.parts[runningIndex];
-  const stage = phases.findIndex((phase) => phase.id === running?.phase);
+  const stage = phases.findIndex((phase) => phase === running?.phase);
+  const status = t(`task.status.${task.status}`);
   const failures = task.parts.filter((part) => part.status === "failed").length;
   const canRetry = task.status === "partial" || task.status === "failed";
 
   async function reveal() {
     if (!path || revealing) return;
 
-    setRevealError("");
+    setRevealError(undefined);
     setRevealing(true);
     try {
       await revealOutput(path, Boolean(task.outputDirectory));
     } catch (error) {
-      setRevealError(error instanceof Error ? error.message : String(error));
+      setRevealError(errorMessage(error));
     } finally {
       setRevealing(false);
     }
@@ -74,20 +54,29 @@ function TaskCard({
           {task.title}
         </h3>
         <span className="status" data-status={task.status} role="status">
-          <span className="sr-only">{task.title}：</span>
-          {statusLabels[task.status]}
+          <span className="sr-only">
+            {t("task.statusLabel", { title: task.title, status })}
+          </span>
+          <span aria-hidden="true">{status}</span>
         </span>
       </div>
       {stage >= 0 && (
         <div className="task-progress">
           <p className="muted" role="status">
-            {multipart && `P${running.number ?? runningIndex + 1} · `}
-            {phases[stage].label}
+            {partLabel(
+              {
+                title: t(`task.phase.${phases[stage]}`),
+                number: multipart
+                  ? (running.number ?? runningIndex + 1)
+                  : undefined,
+              },
+              t,
+            )}
           </p>
           <div className="phase-track" aria-hidden="true">
             {phases.map((phase, index) => (
               <span
-                key={phase.id}
+                key={phase}
                 data-stage={
                   index === stage
                     ? "current"
@@ -100,32 +89,44 @@ function TaskCard({
           </div>
         </div>
       )}
-      {task.error && <p className="error task-error">{task.error}</p>}
+      {task.error && (
+        <p className="error task-error">{renderMessage(t, task.error)}</p>
+      )}
       {multipart ? (
         <details className="task-details">
           <summary>
             <Icon name="down" />
-            已保存 {task.outputs.length} / {task.parts.length} 份
-            {failures > 0 && ` · ${failures} 项失败`}
+            {t(failures > 0 ? "task.savedWithFailures" : "task.saved", {
+              saved: task.outputs.length,
+              total: task.parts.length,
+              failed: failures,
+            })}
           </summary>
           <ul className="task-parts">
             {task.parts.map((part) => (
               <li className="task-part" key={part.id}>
-                <span className="task-part-name">
-                  {part.number ? `P${part.number} · ` : ""}
-                  {part.title}
-                </span>
+                <span className="task-part-name">{partLabel(part, t)}</span>
                 <span className="status" data-status={part.status}>
-                  {partStatus(part)}
+                  {t(
+                    part.status === "running" && part.phase
+                      ? `task.phase.${part.phase}`
+                      : `task.status.${part.status}`,
+                  )}
                 </span>
-                {part.error && <p className="error task-error">{part.error}</p>}
+                {part.error && (
+                  <p className="error task-error">
+                    {renderMessage(t, part.error)}
+                  </p>
+                )}
               </li>
             ))}
           </ul>
         </details>
       ) : (
         task.parts[0]?.error && (
-          <p className="error task-error">{task.parts[0].error}</p>
+          <p className="error task-error">
+            {renderMessage(t, task.parts[0].error)}
+          </p>
         )
       )}
       {path && (
@@ -141,11 +142,13 @@ function TaskCard({
             disabled={revealing}
           >
             <Icon name="folder" />
-            {revealing
-              ? "正在打开…"
-              : task.outputDirectory
-                ? "打开输出目录"
-                : "定位文稿"}
+            {t(
+              revealing
+                ? "task.opening"
+                : task.outputDirectory
+                  ? "task.openFolder"
+                  : "task.reveal",
+            )}
           </button>
         )}
         {canRetry && (
@@ -156,16 +159,16 @@ function TaskCard({
               title.current?.focus({ preventScroll: true });
             }}
           >
-            重试失败项
+            {t("task.retry")}
           </button>
         )}
         <button type="button" onClick={() => onRestore(task.id)}>
-          恢复
+          {t("task.restore")}
         </button>
       </div>
       {revealError && (
         <p className="error task-error" role="alert">
-          {revealError}
+          {renderMessage(t, revealError)}
         </p>
       )}
     </li>
@@ -179,20 +182,23 @@ export function TaskList({
   queue: TaskQueue;
   onRestore: (taskId: string) => void;
 }) {
+  const { t } = useTranslation();
   const tasks = useSyncExternalStore(queue.subscribe, queue.getSnapshot);
 
   return (
     <section className="queue-panel" aria-labelledby="queue-heading">
       <header className="queue-header">
-        <h2 id="queue-heading">任务队列</h2>
-        {tasks.length > 0 && <p className="muted">{tasks.length} 项任务</p>}
+        <h2 id="queue-heading">{t("task.heading")}</h2>
+        {tasks.length > 0 && (
+          <p className="muted">{t("task.count", { count: tasks.length })}</p>
+        )}
       </header>
       {tasks.length === 0 ? (
         <div className="queue-empty">
           <span className="queue-empty-icon" aria-hidden="true">
             <Icon name="document" />
           </span>
-          <h3>还没有任务</h3>
+          <h3>{t("task.empty")}</h3>
         </div>
       ) : (
         <ul className="tasks">

@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+use crate::error::AppError;
 use reqwest::{Client, Url, header, redirect::Policy};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -34,8 +35,8 @@ fn host_is(host: &str, domain: &str) -> bool {
             .is_some_and(|prefix| prefix.ends_with('.'))
 }
 
-fn platform_url(input: &str, youtube: bool) -> Result<Url, String> {
-    let url = Url::parse(input).map_err(|_| "视频链接格式无效。".to_string())?;
+fn platform_url(input: &str, youtube: bool) -> Result<Url, AppError> {
+    let url = Url::parse(input).map_err(|_| "error.malformedVideoUrl")?;
     let host = url.host_str().unwrap_or_default();
     let known_host = if youtube {
         host_is(host, "youtube.com") || host == "youtu.be"
@@ -49,7 +50,7 @@ fn platform_url(input: &str, youtube: bool) -> Result<Url, String> {
         || url.password().is_some()
         || !known_host
     {
-        return Err("请输入支持的视频平台的 HTTPS 链接。".into());
+        return Err("error.unsupportedVideoUrl".into());
     }
 
     Ok(url)
@@ -82,19 +83,18 @@ fn find_tool(app: &AppHandle, program: &str) -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
-fn require_tool(app: &AppHandle, program: &str) -> Result<PathBuf, String> {
-    find_tool(app, program).ok_or_else(|| {
-        format!("找不到 {program}。请安装媒体工具并重启 Lectavia，或通过 LECTAVIA_MEDIA_DIR 指定工具目录。")
-    })
+fn require_tool(app: &AppHandle, program: &str) -> Result<PathBuf, AppError> {
+    find_tool(app, program)
+        .ok_or_else(|| AppError::from("error.missingTool").with("program", program))
 }
 
-fn process_output(command: &mut Command, failure: &str) -> Result<Output, String> {
+fn process_output(command: &mut Command, failure: &'static str) -> Result<Output, AppError> {
     #[cfg(windows)]
     command.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
     let output = command
         .output()
-        .map_err(|error| format!("{failure}：{error}"))?;
+        .map_err(|error| AppError::detail(failure, error))?;
     if output.status.success() {
         return Ok(output);
     }
@@ -109,13 +109,13 @@ fn process_output(command: &mut Command, failure: &str) -> Result<Output, String
         .take(420)
         .collect();
     if detail.is_empty() {
-        Err(format!("{failure}（{}）。", output.status))
+        Err(AppError::detail(failure, output.status))
     } else {
-        Err(format!("{failure}：{detail}"))
+        Err(AppError::detail(failure, detail))
     }
 }
 
-fn yt_dlp(app: &AppHandle, youtube: bool) -> Result<Command, String> {
+fn yt_dlp(app: &AppHandle, youtube: bool) -> Result<Command, AppError> {
     let mut command = Command::new(require_tool(app, "yt-dlp")?);
     command.args([
         "--ignore-config",
@@ -137,7 +137,7 @@ fn yt_dlp(app: &AppHandle, youtube: bool) -> Result<Command, String> {
             .filter_map(|name| find_tool(app, name).map(|path| (name, path)))
             .collect();
         if runtimes.is_empty() {
-            return Err("解析 YouTube 视频需要 Deno 或 Node.js 22 及以上。".into());
+            return Err("error.youtubeRuntime".into());
         }
 
         command.arg("--no-js-runtimes");
@@ -156,7 +156,7 @@ pub async fn probe_remote_video(
     url: String,
     youtube: bool,
     flat: bool,
-) -> Result<Value, String> {
+) -> Result<Value, AppError> {
     let url = platform_url(&url, youtube)?;
     tauri::async_runtime::spawn_blocking(move || {
         let mut command = yt_dlp(&app, youtube)?;
@@ -167,37 +167,37 @@ pub async fn probe_remote_video(
             command.args(["--no-playlist", "--playlist-items", "1"]);
         }
         command.arg("--").arg(url.as_str());
-        let output = process_output(&mut command, "读取视频信息失败")?;
-        serde_json::from_slice(&output.stdout).map_err(|_| "视频信息格式无效。".into())
+        let output = process_output(&mut command, "error.probe")?;
+        serde_json::from_slice(&output.stdout).map_err(|_| "error.invalidVideoMetadata".into())
     })
     .await
-    .map_err(|error| error.to_string())?
+    .map_err(|error| AppError::detail("error.background", error))?
 }
 
-fn bilibili_client() -> Result<Client, String> {
+fn bilibili_client() -> Result<Client, AppError> {
     Client::builder()
         .redirect(Policy::none())
         .timeout(Duration::from_secs(12))
         .user_agent("Mozilla/5.0")
         .build()
-        .map_err(|error| error.to_string())
+        .map_err(|error| AppError::detail("error.bilibiliDetails", error))
 }
 
 #[tauri::command]
-pub async fn fetch_bilibili_video(video_id: String) -> Result<Value, String> {
+pub async fn fetch_bilibili_video(video_id: String) -> Result<Value, AppError> {
     let mut url = Url::parse("https://api.bilibili.com/x/web-interface/view").unwrap();
     let query = if let Some(id) = video_id.strip_prefix("BV") {
         if id.len() != 10 || !id.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
-            return Err("Bilibili 视频编号无效。".into());
+            return Err("error.bilibiliId".into());
         }
         ("bvid", video_id.as_str())
     } else if let Some(id) = video_id.strip_prefix("av") {
         if id.is_empty() || id.len() > 19 || !id.bytes().all(|byte| byte.is_ascii_digit()) {
-            return Err("Bilibili 视频编号无效。".into());
+            return Err("error.bilibiliId".into());
         }
         ("aid", id)
     } else {
-        return Err("Bilibili 视频编号无效。".into());
+        return Err("error.bilibiliId".into());
     };
     url.query_pairs_mut().append_pair(query.0, query.1);
 
@@ -207,37 +207,39 @@ pub async fn fetch_bilibili_video(video_id: String) -> Result<Value, String> {
         .send()
         .await
         .and_then(|response| response.error_for_status())
-        .map_err(|error| format!("读取 Bilibili 视频信息失败：{error}"))?
+        .map_err(|error| AppError::detail("error.bilibiliDetails", error))?
         .json()
         .await
-        .map_err(|error| format!("读取 Bilibili 视频信息失败：{error}"))
+        .map_err(|error| AppError::detail("error.bilibiliDetails", error))
 }
 
 #[tauri::command]
-pub async fn resolve_bilibili_short_link(url: String) -> Result<String, String> {
+pub async fn resolve_bilibili_short_link(url: String) -> Result<String, AppError> {
     let url = platform_url(&url, false)?;
     if url.host_str() != Some("b23.tv") {
-        return Err("请输入 b23.tv 短链接。".into());
+        return Err("error.bilibiliShortRequired".into());
     }
     let response = bilibili_client()?
         .get(url.clone())
         .send()
         .await
-        .map_err(|error| format!("展开 Bilibili 短链接失败：{error}"))?;
+        .map_err(|error| AppError::detail("error.bilibiliResolve", error))?;
     let location = response
         .headers()
         .get(header::LOCATION)
         .and_then(|value| value.to_str().ok())
-        .ok_or_else(|| "Bilibili 短链接没有返回视频地址。".to_string())?;
-    let resolved = url.join(location).map_err(|error| error.to_string())?;
+        .ok_or_else(|| "error.bilibiliShortMissing")?;
+    let resolved = url
+        .join(location)
+        .map_err(|error| AppError::detail("error.bilibiliResolve", error))?;
     platform_url(resolved.as_str(), false).map(|url| url.to_string())
 }
 
-fn media_root(app: &AppHandle) -> Result<PathBuf, String> {
+fn media_root(app: &AppHandle) -> Result<PathBuf, AppError> {
     app.path()
         .app_cache_dir()
         .map(|path| path.join("media"))
-        .map_err(|error| error.to_string())
+        .map_err(|_| "error.cacheLocation".into())
 }
 
 fn download_audio(
@@ -246,7 +248,7 @@ fn download_audio(
     ffmpeg: &Path,
     url: &str,
     youtube: bool,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf, AppError> {
     let url = platform_url(url, youtube)?;
     let mut command = yt_dlp(app, youtube)?;
     if youtube {
@@ -268,31 +270,32 @@ fn download_audio(
         .arg(ffmpeg)
         .arg("--")
         .arg(url.as_str());
-    process_output(&mut command, "下载视频音轨失败")?;
+    process_output(&mut command, "error.audioDownload")?;
     list_files(directory)?
         .into_iter()
         .find(|path| path.file_stem().is_some_and(|stem| stem == "source"))
-        .ok_or_else(|| "下载完成，但缺少视频音轨文件。".into())
+        .ok_or_else(|| "error.noDownloadedAudio".into())
 }
 
-fn list_files(directory: &Path) -> Result<Vec<PathBuf>, String> {
+fn list_files(directory: &Path) -> Result<Vec<PathBuf>, AppError> {
     fs::read_dir(directory)
         .and_then(|entries| {
             entries
                 .map(|entry| entry.map(|entry| entry.path()))
                 .collect::<Result<Vec<_>, _>>()
         })
-        .map_err(|error| format!("读取音轨缓存失败：{error}"))
+        .map_err(|error| AppError::detail("error.audioCacheRead", error))
 }
 
-fn prepare_audio(app: &AppHandle, source: MediaSource) -> Result<AudioChunks, String> {
+fn prepare_audio(app: &AppHandle, source: MediaSource) -> Result<AudioChunks, AppError> {
     let ffmpeg = require_tool(app, "ffmpeg")?;
     let root = media_root(app)?;
-    fs::create_dir_all(root.as_path()).map_err(|error| format!("创建音轨缓存失败：{error}"))?;
+    fs::create_dir_all(root.as_path())
+        .map_err(|error| AppError::detail("error.audioCacheCreate", error))?;
     let scratch = tempfile::Builder::new()
         .prefix("audio-")
         .tempdir_in(root)
-        .map_err(|error| format!("创建音轨缓存失败：{error}"))?;
+        .map_err(|error| AppError::detail("error.audioCacheCreate", error))?;
     let directory = scratch.path();
     let (input, remove_input) = match source {
         MediaSource::Bilibili { url } => {
@@ -303,7 +306,7 @@ fn prepare_audio(app: &AppHandle, source: MediaSource) -> Result<AudioChunks, St
         }
         MediaSource::Local { path } => {
             if !path.is_absolute() || !path.is_file() {
-                return Err("找不到本地视频文件。".into());
+                return Err("error.localVideoMissing".into());
             }
             (path, false)
         }
@@ -345,11 +348,12 @@ fn prepare_audio(app: &AppHandle, source: MediaSource) -> Result<AudioChunks, St
                 "1",
                 "chunk-%06d.mp3",
             ]),
-        "提取与转换音轨失败",
+        "error.audioExtract",
     )?;
 
     if remove_input {
-        fs::remove_file(input).map_err(|error| format!("清理源音轨失败：{error}"))?;
+        fs::remove_file(input)
+            .map_err(|error| AppError::detail("error.audioSourceCleanup", error))?;
     }
 
     let mut files: Vec<_> = list_files(directory)?
@@ -358,7 +362,7 @@ fn prepare_audio(app: &AppHandle, source: MediaSource) -> Result<AudioChunks, St
         .collect();
     files.sort();
     if files.is_empty() {
-        return Err("没有可供转写的音轨。".into());
+        return Err("error.noAudio".into());
     }
 
     Ok(AudioChunks {
@@ -371,14 +375,14 @@ fn prepare_audio(app: &AppHandle, source: MediaSource) -> Result<AudioChunks, St
 pub async fn prepare_media_audio(
     app: AppHandle,
     source: MediaSource,
-) -> Result<AudioChunks, String> {
+) -> Result<AudioChunks, AppError> {
     tauri::async_runtime::spawn_blocking(move || prepare_audio(&app, source))
         .await
-        .map_err(|error| error.to_string())?
+        .map_err(|error| AppError::detail("error.background", error))?
 }
 
 #[tauri::command]
-pub async fn remove_media_audio(app: AppHandle, directory: PathBuf) -> Result<(), String> {
+pub async fn remove_media_audio(app: AppHandle, directory: PathBuf) -> Result<(), AppError> {
     let root = media_root(&app)?;
     if directory.parent() != Some(root.as_path())
         || !directory
@@ -386,14 +390,14 @@ pub async fn remove_media_audio(app: AppHandle, directory: PathBuf) -> Result<()
             .and_then(|name| name.to_str())
             .is_some_and(|name| name.starts_with("audio-"))
     {
-        return Err("只能清理 Lectavia 创建的音轨缓存。".into());
+        return Err("error.audioCleanupRestricted".into());
     }
 
     tauri::async_runtime::spawn_blocking(move || match fs::remove_dir_all(directory) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(format!("清理音轨缓存失败：{error}")),
+        Err(error) => Err(AppError::detail("error.audioCleanup", error)),
     })
     .await
-    .map_err(|error| error.to_string())?
+    .map_err(|error| AppError::detail("error.background", error))?
 }

@@ -133,6 +133,21 @@ textarea {
   padding-block: 0.625rem;
 }
 
+.header-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.language-picker select {
+  min-height: 2.625rem;
+  max-width: 100%;
+  padding-block: 0.375rem;
+}
+
 .brand {
   flex: 0 0 auto;
   gap: 0.625rem;

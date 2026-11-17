@@ -1,3 +1,4 @@
+mod error;
 mod media;
 mod models;
 mod output;

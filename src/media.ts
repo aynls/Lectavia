@@ -1,9 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { TFunction } from "i18next";
+import { message } from "./i18n";
 import type { VideoSource } from "./video-source";
 
 export type MediaPart = {
   id: string;
-  title: string;
+  title?: string;
   number?: number;
   source: VideoSource;
 };
@@ -16,6 +18,16 @@ export type MediaInfo = {
   multipart: boolean;
   preferredPartId?: string;
 };
+
+export function partLabel(
+  part: Pick<MediaPart, "number" | "title">,
+  t: TFunction,
+): string {
+  if (!part.number) return part.title ?? t("output.fallbackTitle");
+  return part.title
+    ? t("media.partLabel", { number: part.number, title: part.title })
+    : t("media.part", { number: part.number });
+}
 
 export type AudioChunks = {
   directory: string;
@@ -55,7 +67,7 @@ function thumbnailUrl(value: string | undefined): string | undefined {
 
 function ordinaryVideo(info: VideoProbe, source: VideoSource): MediaInfo {
   const title = info.title?.trim();
-  if (!title) throw new Error("无法取得视频标题。");
+  if (!title) throw message("error.noVideoTitle");
 
   return {
     title,
@@ -105,14 +117,13 @@ async function fallbackBilibili(url: URL, videoId: string): Promise<MediaInfo> {
     parts.push({
       id: `${videoId}:${number}`,
       number,
-      title: `第 ${number} P`,
       source: { kind: "bilibili", url: partUrl.href },
     });
   }
 
   const first = parts[0];
   if (!first || first.source.kind === "local") {
-    if (flat.entries) throw new Error("无法识别视频的分 P 列表。");
+    if (flat.entries) throw message("error.unknownParts");
     return ordinaryVideo(flat, { kind: "bilibili", url: parentUrl });
   }
 
@@ -143,7 +154,7 @@ async function inspectBilibili(link: string): Promise<MediaInfo> {
   const videoId = /^\/video\/(BV[a-zA-Z0-9]{10}|av\d+)\/?$/.exec(
     url.pathname,
   )?.[1];
-  if (!videoId) throw new Error("请输入 Bilibili 视频投稿链接。");
+  if (!videoId) throw message("error.bilibiliPostRequired");
 
   let response: BilibiliVideo;
   try {
@@ -168,7 +179,7 @@ async function inspectBilibili(link: string): Promise<MediaInfo> {
     .map<MediaPart>(({ page, part }) => ({
       id: `${details.bvid}:${page}`,
       number: page,
-      title: pages.length === 1 ? details.title : part || `第 ${page} P`,
+      title: pages.length === 1 ? details.title : part?.trim() || undefined,
       source: { kind: "bilibili", url: `${canonical}?p=${page}` },
     }));
   if (!parts.length) return fallbackBilibili(url, videoId);
@@ -203,7 +214,7 @@ export async function inspectMedia(source: VideoSource): Promise<MediaInfo> {
     info.live_status === "is_live" ||
     info.live_status === "is_upcoming"
   ) {
-    throw new Error("请选择一个已经发布的 YouTube 视频。");
+    throw message("error.publishedYoutubeRequired");
   }
 
   return ordinaryVideo(info, source);

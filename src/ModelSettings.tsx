@@ -1,5 +1,13 @@
 import { useId, useRef, useState, type SubmitEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { Icon } from "./Icon";
+import {
+  errorMessage,
+  message,
+  redactMessage,
+  renderMessage,
+  type Message,
+} from "./i18n";
 import {
   OPENROUTER_ASR_MODEL,
   OPENROUTER_BASE_URL,
@@ -28,13 +36,8 @@ interface CatalogLookup {
   baseUrl: string;
   apiKey: string;
   models?: CatalogModel[];
-  error?: string;
+  error?: Message;
 }
-
-const purposeLabels: Record<ModelPurpose, string> = {
-  asr: "语音转写",
-  llm: "文稿整理",
-};
 
 function ReasoningField({
   model,
@@ -45,28 +48,29 @@ function ReasoningField({
   effort: string;
   onChange: (effort: string) => void;
 }) {
+  const { t } = useTranslation();
   const id = useId();
   const [manual, setManual] = useState(false);
   const efforts = model?.reasoningEfforts ?? [];
   const useManualEffort =
     manual || (effort !== "" && !efforts.includes(effort));
   const defaultLabel = model?.defaultEffort
-    ? `供应商默认（${model.defaultEffort}）`
-    : "供应商默认";
+    ? t("model.namedDefaultEffort", { effort: model.defaultEffort })
+    : t("model.defaultEffort");
 
   return (
     <details className="settings-advanced">
       <summary>
         <Icon name="down" />
-        思考强度
+        {t("model.effort")}
         <small className="advanced-selection" title={effort}>
-          {effort || "供应商默认"}
+          {effort || t("model.defaultEffort")}
         </small>
       </summary>
       <div className="advanced-content">
         {efforts.length > 0 && (
           <>
-            <label htmlFor={id}>思考强度</label>
+            <label htmlFor={id}>{t("model.effort")}</label>
             <select
               id={id}
               name="reasoning-effort-choice"
@@ -83,27 +87,25 @@ function ReasoningField({
                   {level}
                 </option>
               ))}
-              <option value="__manual__">手动填写</option>
+              <option value="__manual__">{t("model.manualEffort")}</option>
             </select>
           </>
         )}
         {(efforts.length === 0 || useManualEffort) && (
           <>
-            <label htmlFor={id + "-custom"}>自定义思考强度</label>
+            <label htmlFor={id + "-custom"}>{t("model.customEffort")}</label>
             <input
               id={id + "-custom"}
               name="reasoning-effort"
               value={effort}
-              placeholder="留空时由供应商决定"
+              placeholder={t("model.effortPlaceholder")}
               aria-describedby={efforts.length === 0 ? id + "-hint" : undefined}
               spellCheck={false}
               onChange={(event) => onChange(event.target.value)}
             />
             {efforts.length === 0 && (
               <p id={id + "-hint"} className="muted settings-hint">
-                {model
-                  ? "供应商未列出此模型的档位。"
-                  : "获取模型列表后可自动检测支持的档位。"}
+                {t(model ? "model.noEfforts" : "model.detectEfforts")}
               </p>
             )}
           </>
@@ -122,6 +124,7 @@ function ProviderFields({
   setConnection: (connection: ModelConnection) => void;
   purpose: ModelPurpose;
 }) {
+  const { t } = useTranslation();
   const id = useId();
   const request = useRef(0);
   const [lookup, setLookup] = useState<CatalogLookup>();
@@ -169,7 +172,7 @@ function ProviderFields({
       if (serial === request.current) {
         setLookup({
           ...endpoint,
-          error: error instanceof Error ? error.message : String(error),
+          error: redactMessage(errorMessage(error), [endpoint.apiKey]),
         });
       }
     }
@@ -177,8 +180,8 @@ function ProviderFields({
 
   return (
     <fieldset className="settings-fields">
-      <legend>{purposeLabels[purpose]}</legend>
-      <label htmlFor={id + "-url"}>API 基础地址</label>
+      <legend>{t(`model.purpose.${purpose}`)}</legend>
+      <label htmlFor={id + "-url"}>{t("model.baseUrl")}</label>
       <input
         id={id + "-url"}
         name={id + "-url"}
@@ -188,7 +191,7 @@ function ProviderFields({
         spellCheck={false}
         onChange={(event) => editEndpoint({ baseUrl: event.target.value })}
       />
-      <label htmlFor={id + "-key"}>API Key</label>
+      <label htmlFor={id + "-key"}>{t("model.apiKey")}</label>
       <input
         id={id + "-key"}
         name={id + "-key"}
@@ -200,7 +203,7 @@ function ProviderFields({
       />
       {models.length > 0 && (
         <>
-          <label htmlFor={id + "-catalog"}>从列表选择模型</label>
+          <label htmlFor={id + "-catalog"}>{t("model.select")}</label>
           <select
             id={id + "-catalog"}
             name={id + "-catalog"}
@@ -211,7 +214,7 @@ function ProviderFields({
               if (model) editModel(model);
             }}
           >
-            <option value="">手动填写模型 ID</option>
+            <option value="">{t("model.manualId")}</option>
             {models.map(({ id, name }) => (
               <option key={id} value={id}>
                 {name === id ? id : `${name} · ${id}`}
@@ -222,13 +225,13 @@ function ProviderFields({
       )}
       {useManualModel && (
         <>
-          <label htmlFor={id + "-model"}>模型 ID</label>
+          <label htmlFor={id + "-model"}>{t("model.id")}</label>
           <input
             id={id + "-model"}
             name={id + "-model"}
             value={connection.model}
             required
-            placeholder="输入供应商提供的模型 ID"
+            placeholder={t("model.idPlaceholder")}
             spellCheck={false}
             onChange={(event) => editModel(event.target.value)}
           />
@@ -241,14 +244,15 @@ function ProviderFields({
           disabled={loading}
           onClick={fetchModels}
         >
-          {loading ? "正在获取…" : "获取模型列表"}
+          {t(loading ? "model.fetching" : "model.fetch")}
         </button>
         <p className={catalog?.error ? "error" : "muted"} role="status">
-          {catalog?.error ??
-            (catalog?.models &&
+          {catalog?.error
+            ? renderMessage(t, catalog.error)
+            : catalog?.models &&
               (models.length
-                ? `找到 ${models.length} 个模型`
-                : "供应商未返回模型，可以手动填写。"))}
+                ? t("model.found", { count: models.length })
+                : t("model.noModels"))}
         </p>
       </div>
       {purpose === "llm" && connection.model.trim() && (
@@ -274,14 +278,15 @@ export function ModelSettings({
   configured: boolean;
   onSave: (value: ModelSettingsValue) => void;
 }) {
+  const { t } = useTranslation();
   const modal = useRef<HTMLDialogElement>(null);
   const firstField = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState(value);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<Message>();
 
   function openSettings() {
     setDraft(value);
-    setError("");
+    setError(undefined);
     modal.current?.showModal();
     firstField.current?.querySelector("input")?.focus();
   }
@@ -293,8 +298,12 @@ export function ModelSettings({
       try {
         validateModelConnection(draft[purpose]);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setError(`${purposeLabels[purpose]}：${message}`);
+        setError(
+          message("error.modelSetting", {
+            purpose: message(`model.purpose.${purpose}`),
+            cause: errorMessage(error),
+          }),
+        );
         return;
       }
     }
@@ -311,23 +320,29 @@ export function ModelSettings({
         data-configured={configured}
         aria-label={
           configured
-            ? `模型设置。整理模型 ${value.llm.model}，转写模型 ${value.asr.model}`
-            : "配置模型，尚未配置转写与整理服务"
+            ? t("model.configuredLabel", {
+                llm: value.llm.model,
+                asr: value.asr.model,
+              })
+            : t("model.requireBoth")
         }
         title={
           configured
-            ? `整理：${value.llm.model}\n转写：${value.asr.model}`
-            : "生成前需要配置转写与整理模型"
+            ? t("model.configuredTitle", {
+                llm: value.llm.model,
+                asr: value.asr.model,
+              })
+            : t("model.requireBoth")
         }
         onClick={openSettings}
       >
         <Icon name="settings" />
         <span className="settings-trigger-copy">
-          <strong>{configured ? value.llm.model : "配置模型"}</strong>
+          <strong>{configured ? value.llm.model : t("model.configure")}</strong>
           <small>
             {configured
-              ? `整理模型 · 转写 ${value.asr.model}`
-              : "尚未配置，生成前需要完成"}
+              ? t("model.configuredSummary", { asr: value.asr.model })
+              : t("model.notConfigured")}
           </small>
         </span>
         <Icon name={configured ? "check" : "warning"} />
@@ -340,20 +355,21 @@ export function ModelSettings({
       >
         <form
           className="settings-form"
+          noValidate
           onSubmit={saveSettings}
-          onChange={() => setError("")}
+          onChange={() => setError(undefined)}
         >
           <header className="settings-header">
             <div>
-              <h2 id="settings-title">模型设置</h2>
+              <h2 id="settings-title">{t("model.title")}</h2>
               <p id="settings-description" className="muted">
-                分别配置语音转写和文稿整理服务。API Key 仅在本次运行期间保留。
+                {t("model.settingsDescription")}
               </p>
             </div>
             <button
               type="button"
               className="quiet icon-button"
-              aria-label="关闭模型设置"
+              aria-label={t("model.close")}
               onClick={() => modal.current?.close()}
             >
               <Icon name="close" />
@@ -378,15 +394,15 @@ export function ModelSettings({
           <div className="settings-footer">
             {error && (
               <p className="error" role="alert">
-                {error}
+                {renderMessage(t, error)}
               </p>
             )}
             <div className="actions settings-actions">
               <button type="button" onClick={() => modal.current?.close()}>
-                取消
+                {t("common.cancel")}
               </button>
               <button type="submit" className="primary">
-                保存设置
+                {t("model.save")}
               </button>
             </div>
           </div>
