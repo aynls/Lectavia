@@ -16,6 +16,7 @@ type PickPromptFile = () => Promise<PromptFile | null>;
 type PresetDraft = Pick<InstructionPreset, "instructions" | "prompt">;
 
 export interface InstructionPresetSettingsHandle {
+  open: () => void;
   saveDraft: (draft: PresetDraft, onSaved: (id: string) => void) => void;
 }
 
@@ -266,6 +267,10 @@ export function InstructionPresetSettings({
   useImperativeHandle(
     ref,
     () => ({
+      open() {
+        dialog.current?.showModal();
+        createButton.current?.focus();
+      },
       saveDraft(draft, onSaved) {
         dialog.current?.showModal();
         setView({ kind: "save", draft, onSaved });
@@ -308,165 +313,147 @@ export function InstructionPresetSettings({
   }
 
   return (
-    <>
-      <button
-        type="button"
-        className="settings-trigger preset-trigger"
-        aria-haspopup="dialog"
-        onClick={() => {
-          dialog.current?.showModal();
-          createButton.current?.focus();
-        }}
-      >
-        <Icon name="bookmark" />
-        <span className="settings-trigger-copy">
-          <strong>{t("output.presets")}</strong>
-        </span>
-      </button>
-      <dialog
-        ref={dialog}
-        className={`settings-dialog preset-dialog${view.kind === "save" ? " preset-save-dialog" : ""}`}
-        aria-labelledby="preset-title"
-        aria-describedby={
-          view.kind === "delete" ? "preset-delete-description" : undefined
-        }
-        onClose={() => showList()}
-      >
-        <div className="settings-form">
-          <header className="settings-header preset-header">
-            <h2 id="preset-title">
-              {t(
-                view.kind === "edit"
-                  ? view.preset
-                    ? "preset.editTitle"
-                    : "preset.create"
-                  : view.kind === "delete"
-                    ? "preset.deleteTitle"
-                    : view.kind === "save"
-                      ? "output.savePreset"
-                      : "output.presets",
-              )}
-            </h2>
-            <div className="preset-header-actions">
-              {view.kind === "list" && (
-                <button
-                  type="button"
-                  ref={createButton}
-                  className="primary preset-create-button"
-                  onClick={() => setView({ kind: "edit" })}
-                >
-                  <Icon name="plus" />
-                  {t("preset.create")}
-                </button>
-              )}
+    <dialog
+      ref={dialog}
+      className={`settings-dialog preset-dialog${view.kind === "save" ? " preset-save-dialog" : ""}`}
+      aria-labelledby="preset-title"
+      aria-describedby={
+        view.kind === "delete" ? "preset-delete-description" : undefined
+      }
+      onClose={() => showList()}
+    >
+      <div className="settings-form">
+        <header className="settings-header preset-header">
+          <h2 id="preset-title">
+            {t(
+              view.kind === "edit"
+                ? view.preset
+                  ? "preset.editTitle"
+                  : "preset.create"
+                : view.kind === "delete"
+                  ? "preset.deleteTitle"
+                  : view.kind === "save"
+                    ? "output.savePreset"
+                    : "output.presets",
+            )}
+          </h2>
+          <div className="preset-header-actions">
+            {view.kind === "list" && (
               <button
                 type="button"
-                className="quiet icon-button"
-                aria-label={t("preset.close")}
-                onClick={() => dialog.current?.close()}
+                ref={createButton}
+                className="primary preset-create-button"
+                onClick={() => setView({ kind: "edit" })}
               >
-                <Icon name="close" />
+                <Icon name="plus" />
+                {t("preset.create")}
               </button>
-            </div>
-          </header>
-          {view.kind === "list" && (
-            <div className="settings-body preset-body preset-list-body">
-              {presets.length > 0 ? (
-                <ul className="preset-list">
-                  {presets.map((preset) => (
-                    <li key={preset.id} className="preset-row">
-                      <div className="preset-row-heading">
-                        <h3>{preset.name}</h3>
-                        <div className="actions preset-row-actions">
-                          <button
-                            type="button"
-                            ref={
-                              view.focusId === preset.id
-                                ? focusButton
-                                : undefined
-                            }
-                            aria-label={t("preset.editNamed", {
-                              name: preset.name,
-                            })}
-                            onClick={() => setView({ kind: "edit", preset })}
-                          >
-                            {t("preset.edit")}
-                          </button>
-                          <button
-                            type="button"
-                            className="quiet preset-delete"
-                            aria-label={t("preset.deleteNamed", {
-                              name: preset.name,
-                            })}
-                            onClick={() => setView({ kind: "delete", preset })}
-                          >
-                            {t("preset.delete")}
-                          </button>
-                        </div>
+            )}
+            <button
+              type="button"
+              className="quiet icon-button"
+              aria-label={t("preset.close")}
+              onClick={() => dialog.current?.close()}
+            >
+              <Icon name="close" />
+            </button>
+          </div>
+        </header>
+        {view.kind === "list" && (
+          <div className="settings-body preset-body preset-list-body">
+            {presets.length > 0 ? (
+              <ul className="preset-list">
+                {presets.map((preset) => (
+                  <li key={preset.id} className="preset-row">
+                    <div className="preset-row-heading">
+                      <h3>{preset.name}</h3>
+                      <div className="actions preset-row-actions">
+                        <button
+                          type="button"
+                          ref={
+                            view.focusId === preset.id ? focusButton : undefined
+                          }
+                          aria-label={t("preset.editNamed", {
+                            name: preset.name,
+                          })}
+                          onClick={() => setView({ kind: "edit", preset })}
+                        >
+                          {t("preset.edit")}
+                        </button>
+                        <button
+                          type="button"
+                          className="quiet preset-delete"
+                          aria-label={t("preset.deleteNamed", {
+                            name: preset.name,
+                          })}
+                          onClick={() => setView({ kind: "delete", preset })}
+                        >
+                          {t("preset.delete")}
+                        </button>
                       </div>
-                      <p className="muted preset-preview">
-                        {preset.prompt?.content ?? preset.instructions}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="muted preset-empty">{t("preset.empty")}</p>
-              )}
+                    </div>
+                    <p className="muted preset-preview">
+                      {preset.prompt?.content ?? preset.instructions}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="muted preset-empty">{t("preset.empty")}</p>
+            )}
+          </div>
+        )}
+        {view.kind === "edit" && (
+          <PresetEditor
+            preset={view.preset}
+            presets={presets}
+            onSave={savePreset}
+            onCancel={() => showList(view.preset?.id)}
+            onPickFile={onPickFile}
+          />
+        )}
+        {view.kind === "save" && (
+          <PresetEditor
+            draft={view.draft}
+            presets={presets}
+            onSave={savePreset}
+            onCancel={() => dialog.current?.close()}
+          />
+        )}
+        {view.kind === "delete" && (
+          <>
+            <div className="settings-body preset-body">
+              <p id="preset-delete-description">
+                {t("preset.deleteDescription", { name: view.preset.name })}
+              </p>
             </div>
-          )}
-          {view.kind === "edit" && (
-            <PresetEditor
-              preset={view.preset}
-              presets={presets}
-              onSave={savePreset}
-              onCancel={() => showList(view.preset?.id)}
-              onPickFile={onPickFile}
-            />
-          )}
-          {view.kind === "save" && (
-            <PresetEditor
-              draft={view.draft}
-              presets={presets}
-              onSave={savePreset}
-              onCancel={() => dialog.current?.close()}
-            />
-          )}
-          {view.kind === "delete" && (
-            <>
-              <div className="settings-body preset-body">
-                <p id="preset-delete-description">
-                  {t("preset.deleteDescription", { name: view.preset.name })}
+            <footer className="settings-footer">
+              {deleteError && (
+                <p className="error" role="alert">
+                  {t("error.deleteInstructionPreset")}
                 </p>
+              )}
+              <div className="actions settings-actions">
+                <button
+                  type="button"
+                  autoFocus
+                  aria-describedby="preset-delete-description"
+                  onClick={() => showList(view.preset.id)}
+                >
+                  {t("common.cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="preset-delete"
+                  onClick={() => deletePreset(view.preset.id)}
+                >
+                  {t("preset.delete")}
+                </button>
               </div>
-              <footer className="settings-footer">
-                {deleteError && (
-                  <p className="error" role="alert">
-                    {t("error.deleteInstructionPreset")}
-                  </p>
-                )}
-                <div className="actions settings-actions">
-                  <button
-                    type="button"
-                    autoFocus
-                    aria-describedby="preset-delete-description"
-                    onClick={() => showList(view.preset.id)}
-                  >
-                    {t("common.cancel")}
-                  </button>
-                  <button
-                    type="button"
-                    className="preset-delete"
-                    onClick={() => deletePreset(view.preset.id)}
-                  >
-                    {t("preset.delete")}
-                  </button>
-                </div>
-              </footer>
-            </>
-          )}
-        </div>
-      </dialog>
-    </>
+            </footer>
+          </>
+        )}
+      </div>
+    </dialog>
   );
 }

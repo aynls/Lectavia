@@ -18,6 +18,8 @@ export default {
   "workspace.need.parts": "select at least one part",
   "workspace.need.models": "configure the models",
   "workspace.need.folder": "choose an available output folder",
+  "settings.title": "Settings",
+  "settings.backToWorkspace": "Back to workspace",
   "media.choose": "Choose a video",
   "media.source": "Video source",
   "media.linkTab": "Paste link",

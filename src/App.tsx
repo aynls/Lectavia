@@ -10,11 +10,8 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import {
-  changeLocale,
   currentLocale,
   errorMessage,
-  isLocale,
-  languages,
   message,
   renderMessage,
   type Message,
@@ -37,6 +34,7 @@ import {
   type ModelSettingsHandle,
   type ModelSettingsValue,
 } from "./ModelSettings";
+import { SettingsPage } from "./SettingsPage";
 import { TaskList } from "./TaskList";
 import {
   TaskQueue,
@@ -102,6 +100,7 @@ export default function App({
   const [presetId, setPresetId] = useState("");
   const [instructionsError, setInstructionsError] = useState<Message>();
   const [settings, setSettings] = useState(initialSettings);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [queueing, setQueueing] = useState(false);
   const composer = useRef<HTMLElement>(null);
   const modelSettings = useRef<ModelSettingsHandle>(null);
@@ -540,46 +539,24 @@ export default function App({
             </span>
             Lectavia
           </h1>
-          <div className="header-controls">
-            <label className="language-picker">
-              <span className="sr-only">{t("common.language")}</span>
-              <select
-                name="language"
-                value={locale}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  if (isLocale(value)) void changeLocale(value);
-                }}
-              >
-                {Object.entries(languages).map(([code, name]) => (
-                  <option key={code} value={code} lang={code}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <InstructionPresetSettings
-              ref={presetSettings}
-              presets={presets}
-              onChange={updatePresets}
-              onPickFile={desktop ? pickPromptFile : undefined}
-            />
-            <ModelSettings
-              ref={modelSettings}
-              value={settings ?? defaultModelSettings}
-              configured={settings !== null}
-              onSave={async (next) => {
-                if (desktop) {
-                  await invoke("save_model_settings", { settings: next });
-                }
-                setSettings(next);
-                setFormError(undefined);
-              }}
-            />
-          </div>
+          <button
+            type="button"
+            className="settings-navigation"
+            onClick={() => setSettingsOpen(!settingsOpen)}
+          >
+            <Icon name={settingsOpen ? "back" : "settings"} />
+            {t(settingsOpen ? "settings.backToWorkspace" : "settings.title")}
+          </button>
         </div>
       </header>
-      <main className="app-width app-main">
+      {settingsOpen && (
+        <SettingsPage
+          modelsConfigured={settings !== null}
+          onOpenModels={() => modelSettings.current?.open()}
+          onOpenPresets={() => presetSettings.current?.open()}
+        />
+      )}
+      <main className="app-width app-main" hidden={settingsOpen}>
         {!desktop && <p className="notice">{t("workspace.desktopRequired")}</p>}
         <div className="workspace">
           <section
@@ -999,6 +976,23 @@ export default function App({
           />
         </div>
       </main>
+      <InstructionPresetSettings
+        ref={presetSettings}
+        presets={presets}
+        onChange={updatePresets}
+        onPickFile={desktop ? pickPromptFile : undefined}
+      />
+      <ModelSettings
+        ref={modelSettings}
+        value={settings ?? defaultModelSettings}
+        onSave={async (next) => {
+          if (desktop) {
+            await invoke("save_model_settings", { settings: next });
+          }
+          setSettings(next);
+          setFormError(undefined);
+        }}
+      />
       <dialog
         ref={restoreDialog}
         className="settings-dialog restore-dialog"

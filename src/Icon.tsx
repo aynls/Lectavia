@@ -1,3 +1,4 @@
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 import { BookmarkSimpleIcon } from "@phosphor-icons/react/dist/csr/BookmarkSimple";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
@@ -17,6 +18,7 @@ import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 
 const icons = {
   arrow: ArrowRightIcon,
+  back: ArrowLeftIcon,
   bookmark: BookmarkSimpleIcon,
   down: CaretDownIcon,
   video: FilmStripIcon,

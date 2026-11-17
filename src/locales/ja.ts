@@ -18,6 +18,8 @@ export default {
   "workspace.need.parts": "パートを1つ以上選択",
   "workspace.need.models": "モデルを設定",
   "workspace.need.folder": "利用可能な保存フォルダーを選択",
+  "settings.title": "設定",
+  "settings.backToWorkspace": "ワークスペースに戻る",
   "media.choose": "動画を選択",
   "media.source": "動画の参照元",
   "media.linkTab": "リンクを貼り付け",

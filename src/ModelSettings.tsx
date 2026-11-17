@@ -380,16 +380,13 @@ function ProviderFields({
 export function ModelSettings({
   ref,
   value,
-  configured,
   onSave,
 }: {
   ref?: Ref<ModelSettingsHandle>;
   value: ModelSettingsValue;
-  configured: boolean;
   onSave: (value: ModelSettingsValue) => Promise<void>;
 }) {
   const { t } = useTranslation();
-  const triggerId = useId();
   const modal = useRef<HTMLDialogElement>(null);
   const savedCallback = useRef<ModelSettingsOpenOptions["onSaved"]>(undefined);
   const [draft, setDraft] = useState(value);
@@ -503,110 +500,90 @@ export function ModelSettings({
   }
 
   return (
-    <>
-      <button
-        type="button"
-        className="settings-trigger"
-        data-configured={configured}
-        aria-haspopup="dialog"
-        aria-labelledby={`${triggerId}-label`}
-        aria-describedby={`${triggerId}-status`}
-        onClick={() => openSettings()}
+    <dialog
+      ref={modal}
+      className="settings-dialog"
+      aria-labelledby="settings-title"
+      aria-describedby="settings-description"
+      onCancel={(event) => {
+        if (saving) event.preventDefault();
+      }}
+      onClose={(event) => {
+        if (!event.currentTarget.open) savedCallback.current = undefined;
+      }}
+    >
+      <form
+        className="settings-form"
+        noValidate
+        onSubmit={saveSettings}
+        onChange={() => setError(undefined)}
       >
-        <Icon name="settings" />
-        <span className="settings-trigger-copy">
-          <strong id={`${triggerId}-label`}>{t("model.title")}</strong>
-          <small id={`${triggerId}-status`}>
-            {t(configured ? "model.configured" : "model.notConfigured")}
-          </small>
-        </span>
-        <Icon name={configured ? "check" : "warning"} />
-      </button>
-      <dialog
-        ref={modal}
-        className="settings-dialog"
-        aria-labelledby="settings-title"
-        aria-describedby="settings-description"
-        onCancel={(event) => {
-          if (saving) event.preventDefault();
-        }}
-        onClose={(event) => {
-          if (!event.currentTarget.open) savedCallback.current = undefined;
-        }}
-      >
-        <form
-          className="settings-form"
-          noValidate
-          onSubmit={saveSettings}
-          onChange={() => setError(undefined)}
-        >
-          <header className="settings-header">
-            <div>
-              <h2 id="settings-title">{t("model.title")}</h2>
-              <p id="settings-description" className="muted">
-                {t(isTauri() ? "model.savedKey" : "model.sessionKey")}
-              </p>
-            </div>
+        <header className="settings-header">
+          <div>
+            <h2 id="settings-title">{t("model.title")}</h2>
+            <p id="settings-description" className="muted">
+              {t(isTauri() ? "model.savedKey" : "model.sessionKey")}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="quiet icon-button"
+            aria-label={t("model.close")}
+            disabled={saving}
+            onClick={() => modal.current?.close()}
+          >
+            <Icon name="close" />
+          </button>
+        </header>
+        <fieldset className="settings-body" disabled={saving}>
+          {modelPurposes.map((purpose) => (
+            <ProviderFields
+              key={`${purpose}-${session}`}
+              connection={draft[purpose]}
+              errors={validation?.[purpose]}
+              setConnection={(connection, changedField) =>
+                updateDraft(purpose, connection, changedField)
+              }
+              onLoadingChange={(modelPurpose, loading) =>
+                setLoadingModels((current) => ({
+                  ...current,
+                  [modelPurpose]: loading,
+                }))
+              }
+              purpose={purpose}
+            />
+          ))}
+        </fieldset>
+        <div className="settings-footer">
+          {error && (
+            <p className="error" role="alert">
+              {renderMessage(t, error)}
+            </p>
+          )}
+          <div className="actions settings-actions">
             <button
               type="button"
-              className="quiet icon-button"
-              aria-label={t("model.close")}
               disabled={saving}
               onClick={() => modal.current?.close()}
             >
-              <Icon name="close" />
+              {t("common.cancel")}
             </button>
-          </header>
-          <fieldset className="settings-body" disabled={saving}>
-            {modelPurposes.map((purpose) => (
-              <ProviderFields
-                key={`${purpose}-${session}`}
-                connection={draft[purpose]}
-                errors={validation?.[purpose]}
-                setConnection={(connection, changedField) =>
-                  updateDraft(purpose, connection, changedField)
-                }
-                onLoadingChange={(modelPurpose, loading) =>
-                  setLoadingModels((current) => ({
-                    ...current,
-                    [modelPurpose]: loading,
-                  }))
-                }
-                purpose={purpose}
-              />
-            ))}
-          </fieldset>
-          <div className="settings-footer">
-            {error && (
-              <p className="error" role="alert">
-                {renderMessage(t, error)}
-              </p>
-            )}
-            <div className="actions settings-actions">
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => modal.current?.close()}
-              >
-                {t("common.cancel")}
-              </button>
-              <button
-                type="submit"
-                className="primary"
-                disabled={saving || loadingModels.asr || loadingModels.llm}
-              >
-                {t(
-                  saving
-                    ? "model.saving"
-                    : saveAndRetry
-                      ? "model.saveAndRetry"
-                      : "model.save",
-                )}
-              </button>
-            </div>
+            <button
+              type="submit"
+              className="primary"
+              disabled={saving || loadingModels.asr || loadingModels.llm}
+            >
+              {t(
+                saving
+                  ? "model.saving"
+                  : saveAndRetry
+                    ? "model.saveAndRetry"
+                    : "model.save",
+              )}
+            </button>
           </div>
-        </form>
-      </dialog>
-    </>
+        </div>
+      </form>
+    </dialog>
   );
 }

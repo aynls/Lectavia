@@ -15,6 +15,8 @@ export default {
   "workspace.need.parts": "选择至少一个分 P",
   "workspace.need.models": "配置模型",
   "workspace.need.folder": "选择可用的保存目录",
+  "settings.title": "设置",
+  "settings.backToWorkspace": "返回工作台",
   "media.choose": "选择视频",
   "media.source": "视频来源",
   "media.linkTab": "粘贴链接",
