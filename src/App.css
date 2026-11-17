@@ -1293,6 +1293,10 @@ button.generate[aria-disabled="true"] {
   width: min(calc(100% - 2rem), 38rem);
 }
 
+.preset-save-dialog {
+  width: min(calc(100% - 2rem), 26rem);
+}
+
 .preset-dialog .settings-header h2 {
   margin-bottom: 0;
 }
@@ -1353,6 +1357,18 @@ button.preset-delete:is(:hover, :focus-visible):not(:disabled) {
 .preset-editor label {
   display: block;
   margin-bottom: 0.375rem;
+}
+
+.preset-name-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.preset-name-heading span {
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .preset-editor :is(input, textarea) {

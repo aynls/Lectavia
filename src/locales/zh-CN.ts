@@ -79,6 +79,7 @@ export default {
   "preset.name": "规范名称",
   "preset.nameRequired": "请输入规范名称。",
   "preset.nameTaken": "这个名称已被使用，请换一个。",
+  "preset.nameTooLong": "规范名称最多 {{limit}} 个字符。",
   "preset.contentRequired": "请输入整理要求。",
   "preset.save": "保存规范",
   "restore.title": "恢复任务参数？",

@@ -16,7 +16,7 @@ interface InstructionsFieldProps {
   canImport: boolean;
   onSelectPreset: (id: string) => void;
   onChange: (text: string) => void;
-  onSavePreset: () => void;
+  onSavePreset: (focusEditor: () => void) => void;
   onImport: () => void;
   onRemovePrompt: () => void;
 }
@@ -127,7 +127,8 @@ export function InstructionsField({
               type="button"
               className="quiet import-prompt"
               disabled={!canSavePreset}
-              onClick={onSavePreset}
+              aria-haspopup="dialog"
+              onClick={() => onSavePreset(() => editor.current?.focus())}
             >
               <Icon name="save" />
               {t("output.savePreset")}

@@ -49,31 +49,3 @@ export function loadInstructionPresets(): InstructionPreset[] {
 export function storeInstructionPresets(presets: InstructionPreset[]): void {
   localStorage.setItem(storageKey, JSON.stringify(presets));
 }
-
-export function addInstructionPreset(
-  presets: InstructionPreset[],
-  instructions: string,
-  prompt: PromptFile | null,
-): { presets: InstructionPreset[]; selectedId: string } {
-  const text = prompt ? "" : instructions.trim();
-  const existing = presets.find((preset) =>
-    prompt
-      ? preset.prompt?.name === prompt.name &&
-        preset.prompt.content === prompt.content
-      : !preset.prompt && preset.instructions === text,
-  );
-  if (existing) return { presets, selectedId: existing.id };
-
-  const firstLine = prompt?.name ?? text.split(/\r?\n/, 1)[0];
-  const characters = Array.from(firstLine);
-  const baseName =
-    characters.length > 48 ? `${characters.slice(0, 47).join("")}…` : firstLine;
-  const names = new Set(presets.map((preset) => preset.name));
-  let name = baseName;
-  for (let index = 2; names.has(name); index += 1) {
-    name = `${baseName} (${index})`;
-  }
-
-  const preset = { id: crypto.randomUUID(), name, instructions: text, prompt };
-  return { presets: [...presets, preset], selectedId: preset.id };
-}

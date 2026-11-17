@@ -21,12 +21,14 @@ import {
 } from "./i18n";
 import { Icon } from "./Icon";
 import {
-  addInstructionPreset,
   loadInstructionPresets,
   storeInstructionPresets,
   type InstructionPreset,
 } from "./instruction-presets";
-import { InstructionPresetSettings } from "./InstructionPresetSettings";
+import {
+  InstructionPresetSettings,
+  type InstructionPresetSettingsHandle,
+} from "./InstructionPresetSettings";
 import { InstructionsField } from "./InstructionsField";
 import { inspectMedia, partLabel, type MediaInfo } from "./media";
 import {
@@ -104,6 +106,7 @@ export default function App({
   const [queueing, setQueueing] = useState(false);
   const composer = useRef<HTMLElement>(null);
   const modelSettings = useRef<ModelSettingsHandle>(null);
+  const presetSettings = useRef<InstructionPresetSettingsHandle>(null);
   const restoreDialog = useRef<HTMLDialogElement>(null);
   const pendingRestoreId = useRef("");
   const workspaceRevision = useRef(0);
@@ -393,16 +396,13 @@ export default function App({
     setPresetId((id) => (next.some((entry) => entry.id === id) ? id : ""));
   }
 
-  function savePreset() {
+  function savePreset(focusEditor: () => void) {
     if (!canSavePreset) return;
     setInstructionsError(undefined);
-    try {
-      const saved = addInstructionPreset(presets, instructions, prompt);
-      if (saved.presets !== presets) updatePresets(saved.presets);
-      setPresetId(saved.selectedId);
-    } catch {
-      setInstructionsError(message("error.saveInstructionPreset"));
-    }
+    presetSettings.current?.saveDraft({ instructions, prompt }, (id) => {
+      setPresetId(id);
+      focusEditor();
+    });
   }
 
   function removeVideo() {
@@ -571,6 +571,7 @@ export default function App({
               </select>
             </label>
             <InstructionPresetSettings
+              ref={presetSettings}
               presets={presets}
               onChange={updatePresets}
               onPickFile={desktop ? pickPromptFile : undefined}

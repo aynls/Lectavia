@@ -84,6 +84,7 @@ export default {
   "preset.name": "Preset name",
   "preset.nameRequired": "Enter a preset name.",
   "preset.nameTaken": "This name is already in use. Choose a different name.",
+  "preset.nameTooLong": "Use at most {{limit}} characters for the preset name.",
   "preset.contentRequired": "Enter organization instructions.",
   "preset.save": "Save preset",
   "restore.title": "Restore task settings?",

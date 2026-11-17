@@ -85,6 +85,7 @@ export default {
   "preset.name": "プリセット名",
   "preset.nameRequired": "プリセット名を入力してください。",
   "preset.nameTaken": "この名前は使用済みです。別の名前を入力してください。",
+  "preset.nameTooLong": "プリセット名は{{limit}}文字以内で入力してください。",
   "preset.contentRequired": "原稿の整理指示を入力してください。",
   "preset.save": "プリセットを保存",
   "restore.title": "タスクの設定を復元しますか？",
