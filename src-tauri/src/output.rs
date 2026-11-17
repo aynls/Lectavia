@@ -73,6 +73,27 @@ fn selected_directory(path: &str) -> Result<&Path, String> {
     }
 }
 
+#[tauri::command]
+pub async fn default_output_directory(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri::Manager;
+
+    let base = app
+        .path()
+        .document_dir()
+        .or_else(|_| app.path().home_dir())
+        .map_err(|error| format!("无法找到默认保存位置：{error}"))?;
+    let directory = base.join("Lectavia");
+    fs::create_dir_all(&directory).map_err(|error| format!("无法创建默认保存目录：{error}"))?;
+    validate_output_directory(directory.to_string_lossy().into_owned()).await
+}
+
+#[tauri::command]
+pub async fn validate_output_directory(directory: String) -> Result<String, String> {
+    let directory = selected_directory(&directory)?;
+    NamedTempFile::new_in(directory).map_err(|error| format!("保存目录不可写：{error}"))?;
+    Ok(directory.to_string_lossy().into_owned())
+}
+
 fn candidate(directory: &Path, stem: &str, extension: &str, number: usize) -> PathBuf {
     if number == 1 {
         directory.join(format!("{stem}{extension}"))
@@ -189,6 +210,21 @@ mod tests {
             safe_title(&"📝".repeat(100)).encode_utf16().count(),
             MAX_TITLE_UNITS
         );
+    }
+
+    #[test]
+    fn validates_output_directory_before_starting() {
+        tauri::async_runtime::block_on(async {
+            let root = tempfile::tempdir().unwrap();
+            let directory = root.path().to_string_lossy().into_owned();
+            assert_eq!(
+                validate_output_directory(directory.clone()).await.unwrap(),
+                directory
+            );
+
+            let missing = root.path().join("missing").to_string_lossy().into_owned();
+            assert!(validate_output_directory(missing).await.is_err());
+        });
     }
 
     #[test]

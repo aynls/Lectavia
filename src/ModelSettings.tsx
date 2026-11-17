@@ -309,10 +309,28 @@ export function ModelSettings({
         type="button"
         className="settings-trigger"
         data-configured={configured}
+        aria-label={
+          configured
+            ? `模型设置。整理模型 ${value.llm.model}，转写模型 ${value.asr.model}`
+            : "配置模型，尚未配置转写与整理服务"
+        }
+        title={
+          configured
+            ? `整理：${value.llm.model}\n转写：${value.asr.model}`
+            : "生成前需要配置转写与整理模型"
+        }
         onClick={openSettings}
       >
         <Icon name="settings" />
-        {configured ? "模型设置" : "配置模型"}
+        <span className="settings-trigger-copy">
+          <strong>{configured ? value.llm.model : "配置模型"}</strong>
+          <small>
+            {configured
+              ? `整理模型 · 转写 ${value.asr.model}`
+              : "尚未配置，生成前需要完成"}
+          </small>
+        </span>
+        <Icon name={configured ? "check" : "warning"} />
       </button>
       <dialog
         ref={modal}

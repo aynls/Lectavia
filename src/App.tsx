@@ -1,4 +1,10 @@
-import { useRef, useState, type SubmitEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type SubmitEvent,
+} from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Icon } from "./Icon";
@@ -18,10 +24,35 @@ interface PromptFile {
   content: string;
 }
 
+type SourceMode = "link" | "local";
+type FolderStatus = "checking" | "ready" | "error";
+
 const queue = new TaskQueue();
 const desktop = isTauri();
+const FOLDER_STORAGE_KEY = "lectavia.output-directory";
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function rememberedFolder(): string {
+  try {
+    return localStorage.getItem(FOLDER_STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function rememberFolder(path: string): void {
+  try {
+    localStorage.setItem(FOLDER_STORAGE_KEY, path);
+  } catch {
+    // The selected directory still works when storage is unavailable.
+  }
+}
 
 export default function App() {
+  const [sourceMode, setSourceMode] = useState<SourceMode>("link");
   const [link, setLink] = useState("");
   const [media, setMedia] = useState<MediaInfo | null>(null);
   const [selectedParts, setSelectedParts] = useState<string[]>([]);
@@ -29,27 +60,98 @@ export default function App() {
   const [sourceError, setSourceError] = useState("");
   const [formError, setFormError] = useState("");
   const [folder, setFolder] = useState("");
+  const [folderStatus, setFolderStatus] = useState<FolderStatus>(
+    desktop ? "checking" : "error",
+  );
+  const [folderError, setFolderError] = useState("");
   const [format, setFormat] = useState<"md" | "txt">("md");
+  const [instructions, setInstructions] = useState("");
   const [prompt, setPrompt] = useState<PromptFile | null>(null);
   const [settings, setSettings] = useState<ModelSettingsValue | null>(null);
   const [justQueued, setJustQueued] = useState(false);
+  const [queueing, setQueueing] = useState(false);
   const linkInput = useRef<HTMLInputElement>(null);
   const requestId = useRef(0);
   const previewKey = useRef("");
   const selected = new Set(selectedParts);
+  const localMedia = media?.parts[0]?.source.kind === "local";
+  const folderReady = folderStatus === "ready" && Boolean(folder);
+  const canGenerate = Boolean(
+    desktop &&
+    !previewing &&
+    !queueing &&
+    media &&
+    selected.size &&
+    folderReady &&
+    settings,
+  );
+
+  const missing: string[] = [];
+  if (!media) {
+    missing.push(
+      sourceError
+        ? "修正视频链接"
+        : sourceMode === "link" && link.trim()
+          ? "解析视频链接"
+          : "选择视频",
+    );
+  } else if (selected.size === 0) {
+    missing.push("选择至少一个分 P");
+  }
+  if (!settings) missing.push("在右上角配置模型");
+  if (folderStatus === "error" || (!folder && folderStatus !== "checking")) {
+    missing.push("选择可用的保存目录");
+  }
+
   const nextStep = justQueued
-    ? "已加入任务队列，可以继续添加视频。"
+    ? "已加入任务队列，可以继续添加下一个视频。"
     : previewing
-      ? ""
-      : !media
-        ? "选择视频后即可继续。"
-        : selected.size === 0
-          ? "请至少选择一个分 P。"
-          : !folder
-            ? "请选择文稿的保存位置。"
-            : !settings
-              ? "请先完成模型设置。"
-              : "";
+      ? "正在解析视频，确认标题和分 P 后即可生成。"
+      : queueing
+        ? "正在确认保存目录，随后加入任务队列。"
+        : missing.length
+          ? `还需：${missing.join("、")}。`
+          : folderStatus === "checking"
+            ? "正在准备默认保存目录。"
+            : `已就绪，将生成 ${selected.size} 份${format === "md" ? " Markdown" : "纯文本"}文稿。`;
+
+  useEffect(() => {
+    if (!desktop) return;
+
+    let active = true;
+    async function prepareFolder() {
+      const previous = rememberedFolder();
+      if (previous) {
+        try {
+          await invoke("validate_output_directory", { directory: previous });
+          if (!active) return;
+          setFolder(previous);
+          setFolderStatus("ready");
+          return;
+        } catch {
+          // An unavailable previous directory falls back to the default.
+        }
+      }
+
+      try {
+        const path = await invoke<string>("default_output_directory");
+        if (!active) return;
+        setFolder(path);
+        setFolderStatus("ready");
+        setFolderError("");
+        rememberFolder(path);
+      } catch {
+        if (!active) return;
+        setFolderStatus("error");
+        setFolderError("无法准备默认保存目录，请手动选择。");
+      }
+    }
+
+    void prepareFolder();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   function clearPreview() {
     requestId.current += 1;
@@ -82,7 +184,7 @@ export default function App() {
     } catch (error) {
       if (id !== requestId.current) return;
       previewKey.current = "";
-      setSourceError(String(error instanceof Error ? error.message : error));
+      setSourceError(errorMessage(error));
     } finally {
       if (id === requestId.current) setPreviewing(false);
     }
@@ -99,9 +201,34 @@ export default function App() {
     void preview(source);
   }
 
+  function changeLink(value: string) {
+    setLink(value);
+    clearPreview();
+    setJustQueued(false);
+  }
+
+  function pasteLink(event: ClipboardEvent<HTMLInputElement>) {
+    const value = event.clipboardData.getData("text");
+    const source = parseVideoLink(value);
+    if (!source) return;
+
+    event.preventDefault();
+    setLink(value);
+    void preview(source);
+  }
+
   function submitLink(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     previewLink(link);
+  }
+
+  function switchSource(mode: SourceMode) {
+    if (mode === sourceMode) return;
+    setSourceMode(mode);
+    setLink("");
+    clearPreview();
+    setFormError("");
+    setJustQueued(false);
   }
 
   async function chooseVideo() {
@@ -128,15 +255,29 @@ export default function App() {
 
   async function chooseFolder() {
     setFormError("");
+    setFolderError("");
     try {
       const path = await open({
         title: "选择输出目录",
         directory: true,
         multiple: false,
+        defaultPath: folder || undefined,
       });
-      if (path) setFolder(path);
+      if (!path) return;
+
+      setFolderStatus("checking");
+      try {
+        await invoke("validate_output_directory", { directory: path });
+        setFolder(path);
+        setFolderStatus("ready");
+        rememberFolder(path);
+      } catch (error) {
+        setFolderStatus(folder ? "ready" : "error");
+        setFolderError(`${errorMessage(error)} 请重新选择保存目录。`);
+      }
     } catch {
-      setFormError("无法打开目录选择窗口。");
+      setFolderStatus(folder ? "ready" : "error");
+      setFolderError("无法打开目录选择窗口。");
     }
   }
 
@@ -146,30 +287,49 @@ export default function App() {
       const file = await invoke<PromptFile | null>("choose_prompt_file");
       if (file) setPrompt(file);
     } catch (error) {
-      setFormError(String(error instanceof Error ? error.message : error));
+      setFormError(errorMessage(error));
     }
   }
 
   function removeVideo() {
     setLink("");
     clearPreview();
-    linkInput.current?.focus();
+    if (sourceMode === "link") linkInput.current?.focus();
   }
 
-  function generate() {
-    if (!media || !selected.size || !folder || !settings) return;
+  async function generate() {
+    if (!canGenerate || !media || !settings) return;
 
     setFormError("");
-    queue.enqueue({
-      media,
-      parts: media.parts.filter((part) => selected.has(part.id)),
-      outputDirectory: folder,
-      format,
-      instructions: prompt?.content,
-      ...settings,
-    });
-    removeVideo();
-    setJustQueued(true);
+    setFolderError("");
+    setQueueing(true);
+    try {
+      await invoke("validate_output_directory", { directory: folder });
+      const customInstructions = [
+        instructions.trim(),
+        prompt?.content.trim() ?? "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+
+      queue.enqueue({
+        media,
+        parts: media.parts.filter((part) => selected.has(part.id)),
+        outputDirectory: folder,
+        format,
+        instructions: customInstructions || undefined,
+        ...settings,
+      });
+      rememberFolder(folder);
+      removeVideo();
+      setJustQueued(true);
+    } catch (error) {
+      setFolderStatus("error");
+      setFolderError("保存目录不可用，请重新选择。");
+      setFormError(`无法开始生成：${errorMessage(error)}`);
+    } finally {
+      setQueueing(false);
+    }
   }
 
   return (
@@ -188,6 +348,7 @@ export default function App() {
             onSave={(next) => {
               setSettings(next);
               setFormError("");
+              setJustQueued(false);
             }}
           />
         </div>
@@ -197,63 +358,127 @@ export default function App() {
           <p className="notice">请在 Lectavia 桌面应用中处理视频。</p>
         )}
         <div className="workspace-title">
-          <h1 id="workspace-title">视频转文稿</h1>
-          <p>转写并整理视频内容，保存为可编辑的 Markdown 或纯文本。</p>
+          <div>
+            <h1 id="workspace-title">视频转文稿</h1>
+            <p>转写并整理视频内容，保存为可编辑的 Markdown 或纯文本。</p>
+          </div>
+          <div className="signal-script" aria-hidden="true">
+            <div className="signal-bars">
+              {Array.from({ length: 9 }, (_, index) => (
+                <span key={index} />
+              ))}
+            </div>
+            <Icon name="arrow" />
+            <div className="script-lines">
+              <span />
+              <span />
+              <span />
+            </div>
+          </div>
         </div>
         <div className="workspace">
           <section className="composer" aria-labelledby="workspace-title">
             <section className="source-section" aria-labelledby="input-heading">
               <div className="section-heading">
                 <h2 id="input-heading">选择视频</h2>
-                <p>粘贴视频链接，或从电脑中选择视频文件。</p>
+                <p>一种来源，一份文稿。链接和本地文件不会混用。</p>
               </div>
-              <form onSubmit={submitLink} noValidate>
-                <label className="source-label" htmlFor="video-url">
-                  视频链接
-                </label>
-                <div className="link-row">
-                  <div className="link-field">
-                    <Icon name="link" />
-                    <input
-                      ref={linkInput}
-                      id="video-url"
-                      name="video-url"
-                      type="url"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      placeholder="粘贴 Bilibili 或 YouTube 链接"
-                      value={link}
-                      disabled={!desktop}
-                      aria-invalid={Boolean(link && sourceError)}
-                      aria-describedby={
-                        link && sourceError ? "source-error" : undefined
-                      }
-                      onBlur={() => previewLink(link)}
-                      onChange={(event) => {
-                        setLink(event.target.value);
-                        clearPreview();
-                        setJustQueued(false);
-                      }}
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={!desktop || !link.trim() || previewing}
-                  >
-                    {previewing && link ? "读取中…" : "读取视频"}
-                  </button>
-                </div>
-              </form>
-              <button
-                type="button"
-                className="quiet local-video"
-                onClick={chooseVideo}
-                disabled={!desktop}
+              <div className="source-tabs" role="tablist" aria-label="视频来源">
+                <button
+                  id="link-tab"
+                  type="button"
+                  role="tab"
+                  aria-selected={sourceMode === "link"}
+                  aria-controls="source-panel"
+                  data-active={sourceMode === "link"}
+                  onClick={() => switchSource("link")}
+                >
+                  <Icon name="link" />
+                  粘贴链接
+                </button>
+                <button
+                  id="local-tab"
+                  type="button"
+                  role="tab"
+                  aria-selected={sourceMode === "local"}
+                  aria-controls="source-panel"
+                  data-active={sourceMode === "local"}
+                  onClick={() => switchSource("local")}
+                >
+                  <Icon name="video" />
+                  本地文件
+                </button>
+              </div>
+              <div
+                id="source-panel"
+                className="source-panel"
+                role="tabpanel"
+                aria-labelledby={
+                  sourceMode === "link" ? "link-tab" : "local-tab"
+                }
               >
-                <Icon name="video" />
-                选择本地视频
-              </button>
+                {sourceMode === "link" ? (
+                  <form onSubmit={submitLink} noValidate>
+                    <label className="source-label" htmlFor="video-url">
+                      Bilibili 或 YouTube 链接
+                    </label>
+                    <div className="link-row">
+                      <div className="link-field">
+                        <Icon name="link" />
+                        <input
+                          ref={linkInput}
+                          id="video-url"
+                          name="video-url"
+                          type="url"
+                          autoCapitalize="none"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          placeholder="粘贴链接后自动解析"
+                          value={link}
+                          disabled={!desktop}
+                          aria-invalid={Boolean(link && sourceError)}
+                          aria-describedby={
+                            link && sourceError ? "source-error" : "source-hint"
+                          }
+                          onBlur={() => previewLink(link)}
+                          onPaste={pasteLink}
+                          onChange={(event) => changeLink(event.target.value)}
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="parse-button"
+                        disabled={!desktop || !link.trim() || previewing}
+                      >
+                        {previewing ? "解析中…" : "解析链接"}
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    className="local-picker"
+                    onClick={chooseVideo}
+                    disabled={!desktop}
+                  >
+                    <span className="local-picker-icon">
+                      <Icon name="video" />
+                    </span>
+                    <span className="local-picker-copy">
+                      <strong>
+                        {localMedia ? "重新选择视频文件" : "选择视频文件"}
+                      </strong>
+                      <small>MP4、MKV、WebM、MOV、M4V、AVI</small>
+                    </span>
+                    <Icon name="arrow" />
+                  </button>
+                )}
+                <p id="source-hint" className="source-hint">
+                  {sourceMode === "link"
+                    ? "解析用于确认标题和分 P；完成后，点击「生成文稿」即可。"
+                    : "选择文件后会显示视频名称，确认后即可生成文稿。"}
+                </p>
+              </div>
               {previewing && (
                 <div
                   className="media media-loading media-heading enter"
@@ -261,13 +486,17 @@ export default function App() {
                 >
                   <span className="media-fallback" aria-hidden="true" />
                   <div className="media-title">
-                    <p className="muted">正在读取视频信息…</p>
+                    <p className="muted">正在读取视频标题和分 P…</p>
                     <span className="skeleton-line" aria-hidden="true" />
                   </div>
                 </div>
               )}
               {sourceError && (
-                <p id="source-error" className="error" role="alert">
+                <p
+                  id="source-error"
+                  className="error source-error"
+                  role="alert"
+                >
                   {sourceError}
                 </p>
               )}
@@ -287,10 +516,17 @@ export default function App() {
                       </span>
                     )}
                     <div className="media-title">
+                      <p className="media-ready">
+                        <Icon name="check" />
+                        已解析，可生成
+                      </p>
                       <h3>{media.title}</h3>
-                      {media.uploader && (
-                        <p className="muted">{media.uploader}</p>
-                      )}
+                      <p className="muted">
+                        {media.uploader ??
+                          (localMedia
+                            ? "本地视频"
+                            : `${media.parts.length} 个视频分段`)}
+                      </p>
                     </div>
                     <button
                       type="button"
@@ -356,6 +592,7 @@ export default function App() {
             >
               <div className="section-heading">
                 <h2 id="output-heading">文稿设置</h2>
+                <p>确定保存位置，并告诉模型如何整理内容。</p>
               </div>
               <div className="options">
                 <div className="option">
@@ -371,8 +608,19 @@ export default function App() {
                     disabled={!desktop}
                   >
                     <Icon name="folder" />
-                    <span>{folder || "选择保存目录"}</span>
+                    <span>
+                      {folder ||
+                        (folderStatus === "checking"
+                          ? "正在准备默认目录…"
+                          : "选择保存目录")}
+                    </span>
+                    <Icon name="down" />
                   </button>
+                  {folderError && (
+                    <p className="error field-error" role="alert">
+                      {folderError}
+                    </p>
+                  )}
                 </div>
                 <div className="option">
                   <label htmlFor="output-format">文件格式</label>
@@ -388,68 +636,76 @@ export default function App() {
                   </select>
                 </div>
               </div>
-              <details className="advanced">
-                <summary>
-                  <Icon name="down" />
-                  自定义整理要求
-                  <small className="advanced-selection" title={prompt?.name}>
-                    {prompt?.name ?? "可选"}
-                  </small>
-                </summary>
-                <div className="advanced-content">
-                  <p className="muted">
-                    使用 Markdown 文件补充摘要、结构或措辞要求。
-                  </p>
-                  <div className="actions">
-                    <button
-                      type="button"
-                      onClick={choosePrompt}
-                      disabled={!desktop}
-                    >
-                      {prompt ? "更换文件" : "选择 Markdown 文件"}
-                    </button>
-                    {prompt && (
+              <div className="instructions-field">
+                <div className="field-label-row">
+                  <label htmlFor="custom-instructions">整理要求</label>
+                  <span>可选</span>
+                </div>
+                <textarea
+                  id="custom-instructions"
+                  rows={4}
+                  value={instructions}
+                  aria-describedby="instructions-hint"
+                  placeholder="例如：按主题分节，保留关键术语，并在末尾列出复习问题。"
+                  onChange={(event) => setInstructions(event.target.value)}
+                />
+                <p id="instructions-hint" className="field-hint">
+                  直接填写即可，也可以导入 Markdown 文件一起补充。
+                </p>
+                <div className="prompt-import">
+                  <button
+                    type="button"
+                    className="quiet import-prompt"
+                    onClick={choosePrompt}
+                    disabled={!desktop}
+                  >
+                    <Icon name="upload" />
+                    {prompt ? "更换 Markdown 文件" : "导入 Markdown 文件"}
+                  </button>
+                  {prompt && (
+                    <div className="prompt-file">
+                      <Icon name="document" />
+                      <span title={prompt.name}>{prompt.name}</span>
                       <button
                         type="button"
-                        className="quiet"
+                        className="quiet icon-button"
+                        aria-label={`移除 ${prompt.name}`}
                         onClick={() => setPrompt(null)}
                       >
-                        移除
+                        <Icon name="close" />
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
-              </details>
+              </div>
             </section>
-            <div className="composer-footer">
+          </section>
+          <div className="side-rail">
+            <section className="action-panel" aria-label="生成文稿">
               {formError && (
                 <p className="error" role="alert">
                   {formError}
                 </p>
               )}
-              <p id="next-step" className="muted next-step" role="status">
-                {desktop ? nextStep : ""}
-              </p>
+              <div className="readiness" data-ready={canGenerate || justQueued}>
+                <Icon name={canGenerate || justQueued ? "check" : "warning"} />
+                <p id="next-step" role="status">
+                  {desktop ? nextStep : "桌面应用提供完整的视频处理能力。"}
+                </p>
+              </div>
               <button
                 type="button"
                 className="primary generate"
-                disabled={
-                  !desktop ||
-                  previewing ||
-                  !media ||
-                  !selected.size ||
-                  !folder ||
-                  !settings
-                }
+                disabled={!canGenerate}
                 aria-describedby="next-step"
-                onClick={generate}
+                onClick={() => void generate()}
               >
-                生成文稿
+                <span>{queueing ? "正在准备…" : "生成文稿"}</span>
                 <Icon name="arrow" />
               </button>
-            </div>
-          </section>
-          <TaskList queue={queue} />
+            </section>
+            <TaskList queue={queue} />
+          </div>
         </div>
       </main>
     </>
