@@ -1,4 +1,5 @@
 mod media;
+mod models;
 
 pub fn run() {
     tauri::Builder::default()
@@ -9,6 +10,8 @@ pub fn run() {
             media::resolve_bilibili_short_link,
             media::prepare_media_audio,
             media::remove_media_audio,
+            models::transcribe_audio_chunk,
+            models::complete_text,
         ])
         .run(tauri::generate_context!())
         .expect("failed to launch Lectavia");
