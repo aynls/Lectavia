@@ -2,20 +2,20 @@
 
 转写 Bilibili、YouTube 或本地视频中的语音，整理为可编辑的 Markdown 或纯文本文稿。
 
-Windows x64 安装包自带 FFmpeg 和 FFprobe，处理本地视频时可以直接使用。在线视频还需要 `yt-dlp`，YouTube 还需要 Deno 或 Node.js 22 及以上。
+Windows x64 安装包自带 yt-dlp、Python、QuickJS-NG、FFmpeg 和 FFprobe。安装后可直接处理 Bilibili、YouTube 和本地视频，无需另行安装这些工具或配置 PATH。
 
 ## 本地开发
 
 需要 Node.js 24、pnpm、Rust stable 和 [Tauri 2 的系统依赖](https://v2.tauri.app/start/prerequisites/)。Windows 上需要 Visual Studio 的 C++ 桌面开发工具和 WebView2。
 
-Lectavia 用 `yt-dlp` 获取在线视频音轨，用 FFmpeg 抽取或切分音频。YouTube 还需要 Deno 或 Node.js 22 及以上。
+Lectavia 用 `yt-dlp` 获取在线视频音轨，用 FFmpeg 抽取或切分音频。使用系统工具开发时，YouTube 还需要 Deno 或 Node.js 22 及以上。
 
 ```powershell
 pnpm install
 powershell -ExecutionPolicy Bypass -File scripts/setup-media.ps1
 ```
 
-安装脚本通过 WinGet 安装缺少的开发用媒体工具。也可以把工具放到 PATH，或将 `LECTAVIA_MEDIA_DIR` 指向工具目录。安装后用新的终端启动应用。已有随包 FFmpeg 的构建产物时，开发模式也会优先使用它。
+安装脚本通过 WinGet 安装缺少的开发用媒体工具。也可以把工具放到 PATH，或将 `LECTAVIA_MEDIA_DIR` 指向工具目录。安装后用新的终端启动应用。已有随包媒体工具的构建产物时，开发模式也会优先使用它们。
 
 ```powershell
 pnpm tauri dev
@@ -44,3 +44,5 @@ pacman -S --needed make diffutils mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_6
 ```
 
 若 MSYS2 装在 `C:\msys64` 以外，先在运行 `pnpm tauri build` 的 PowerShell 中将 `MSYS2_ROOT` 设为它的安装目录。首次构建会下载并校验 FFmpeg、LAME 源码，然后编译并打包。后续构建复用校验通过的产物。安装包内的 `media-tools/ffmpeg` 提供相应源码、构建脚本和 LGPL 许可文本。
+
+构建也会下载并校验固定版本的 yt-dlp、Python 嵌入包和 QuickJS-NG，再从 `media-tools/online` 一并打包。更新这些工具时，在 `scripts/prepare-online-media.ps1` 更新对应版本和 SHA-256，然后重新构建安装包。

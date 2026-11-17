@@ -150,6 +150,8 @@ export default {
     "找不到 {{program}}。请安装媒体工具并重启 Lectavia，或通过 LECTAVIA_MEDIA_DIR 指定工具目录。",
   "error.missingBundledFfmpeg":
     "Lectavia 随附的 FFmpeg 文件缺失，请重新安装 Lectavia。",
+  "error.missingBundledOnlineMedia":
+    "Lectavia 随附的在线视频工具文件缺失，请重新安装 Lectavia。",
   "error.youtubeRuntime": "解析 YouTube 视频需要 Deno 或 Node.js 22 及以上。",
   "error.probe": "读取视频信息失败。{{detail}}",
   "error.invalidVideoMetadata": "视频信息格式无效。",

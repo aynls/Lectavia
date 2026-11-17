@@ -1,0 +1,15 @@
+Lectavia runs the following tools as separate programs for online media.
+
+yt-dlp and yt-dlp-ejs are provided under the Unlicense.
+https://github.com/yt-dlp/yt-dlp
+https://github.com/yt-dlp/ejs
+See dist/yt-dlp-LICENSE.txt. The bundled challenge scripts contain license
+notices for Meriyah (ISC) and Astring (MIT).
+
+The Python embeddable distribution is from the Python Software Foundation.
+https://www.python.org/
+See dist/python/LICENSE.txt for the Python and third-party license notices.
+
+QuickJS-NG is distributed under the MIT License.
+https://github.com/quickjs-ng/quickjs
+See dist/QuickJS-NG-LICENSE.txt.

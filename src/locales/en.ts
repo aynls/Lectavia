@@ -163,6 +163,8 @@ export default {
     "Could not find {{program}}. Install the media tools and restart Lectavia, or set LECTAVIA_MEDIA_DIR to their folder.",
   "error.missingBundledFfmpeg":
     "The FFmpeg files bundled with Lectavia are missing. Reinstall Lectavia.",
+  "error.missingBundledOnlineMedia":
+    "The online video tools bundled with Lectavia are missing. Reinstall Lectavia.",
   "error.youtubeRuntime":
     "Inspecting YouTube videos requires Deno or Node.js 22 or later.",
   "error.probe": "Could not read video information. {{detail}}",

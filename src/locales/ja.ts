@@ -165,6 +165,8 @@ export default {
     "{{program}} が見つかりません。メディアツールをインストールして Lectavia を再起動するか、LECTAVIA_MEDIA_DIR でツールのフォルダーを指定してください。",
   "error.missingBundledFfmpeg":
     "Lectavia に同梱されている FFmpeg ファイルが見つかりません。Lectavia を再インストールしてください。",
+  "error.missingBundledOnlineMedia":
+    "Lectavia に同梱されているオンライン動画用ツールのファイルが見つかりません。Lectavia を再インストールしてください。",
   "error.youtubeRuntime":
     "YouTube 動画の解析には Deno または Node.js 22 以降が必要です。",
   "error.probe": "動画情報を取得できませんでした。{{detail}}",

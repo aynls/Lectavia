@@ -1,8 +1,8 @@
 {
   "build": {
-    "beforeBuildCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-ffmpeg.ps1 && pnpm build"
+    "beforeBuildCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-ffmpeg.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-online-media.ps1 && pnpm build"
   },
   "bundle": {
-    "resources": ["media-tools/ffmpeg"]
+    "resources": ["media-tools/ffmpeg", "media-tools/online"]
   }
 }

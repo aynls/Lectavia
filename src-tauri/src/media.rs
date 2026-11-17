@@ -1,5 +1,7 @@
 use std::{
-    env, fs,
+    env,
+    ffi::OsString,
+    fs,
     path::{Path, PathBuf},
     process::{Command, Output},
     time::Duration,
@@ -137,8 +139,58 @@ fn process_output(command: &mut Command, failure: &'static str) -> Result<Output
     }
 }
 
-fn yt_dlp(app: &AppHandle, youtube: bool, ffmpeg: Option<&Path>) -> Result<Command, AppError> {
+fn add_js_runtime(command: &mut Command, name: &str, path: &Path) {
+    let mut runtime = OsString::from(name);
+    runtime.push(":");
+    runtime.push(path);
+    command.arg("--js-runtimes").arg(runtime);
+}
+
+fn online_media_command(app: &AppHandle, youtube: bool) -> Result<Command, AppError> {
+    #[cfg(all(windows, target_arch = "x86_64"))]
+    {
+        if let Ok(resources) = app.path().resource_dir() {
+            let directory = resources.join("media-tools/online/dist");
+            let python = directory.join("python/python.exe");
+            let yt_dlp = directory.join("yt-dlp.pyz");
+            let quickjs = directory.join("qjs.exe");
+            if python.is_file() && yt_dlp.is_file() && (!youtube || quickjs.is_file()) {
+                let mut command = Command::new(python);
+                command
+                    .args(["-I", "-B"])
+                    .arg(yt_dlp)
+                    .arg("--no-js-runtimes");
+                if youtube {
+                    add_js_runtime(&mut command, "quickjs", &quickjs);
+                }
+                return Ok(command);
+            }
+        }
+        if !cfg!(debug_assertions) {
+            return Err("error.missingBundledOnlineMedia".into());
+        }
+    }
+
     let mut command = Command::new(require_tool(app, "yt-dlp")?);
+    if youtube {
+        let runtimes: Vec<_> = ["deno", "node"]
+            .into_iter()
+            .filter_map(|name| find_tool(app, name).map(|path| (name, path)))
+            .collect();
+        if runtimes.is_empty() {
+            return Err("error.youtubeRuntime".into());
+        }
+
+        command.arg("--no-js-runtimes");
+        for (name, path) in runtimes {
+            add_js_runtime(&mut command, name, &path);
+        }
+    }
+    Ok(command)
+}
+
+fn yt_dlp(app: &AppHandle, youtube: bool, ffmpeg: Option<&Path>) -> Result<Command, AppError> {
+    let mut command = online_media_command(app, youtube)?;
     command.args([
         "--ignore-config",
         "--no-plugin-dirs",
@@ -157,22 +209,6 @@ fn yt_dlp(app: &AppHandle, youtube: bool, ffmpeg: Option<&Path>) -> Result<Comma
         command.arg("--ffmpeg-location").arg(ffmpeg);
     }
 
-    if youtube {
-        let runtimes: Vec<_> = ["deno", "node"]
-            .into_iter()
-            .filter_map(|name| find_tool(app, name).map(|path| (name, path)))
-            .collect();
-        if runtimes.is_empty() {
-            return Err("error.youtubeRuntime".into());
-        }
-
-        command.arg("--no-js-runtimes");
-        for (name, path) in runtimes {
-            command
-                .arg("--js-runtimes")
-                .arg(format!("{name}:{}", path.display()));
-        }
-    }
     Ok(command)
 }
 
