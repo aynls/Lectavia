@@ -8,6 +8,7 @@ const paths = {
   down: "m6 9 6 6 6-6",
   arrow: "M5 12h14m-6-6 6 6-6 6",
   close: "m6 6 12 12M6 18 18 6",
+  documents: "M8 3h8l4 4v12H8z M16 3v5h4 M12 12h4m-4 3h4 M4 7v15h12",
 };
 
 export function Icon({ name }: { name: keyof typeof paths }) {
