@@ -5,45 +5,45 @@
   color: var(--ink);
   background: var(--canvas);
   line-height: 1.55;
-  --canvas: #efefec;
-  --surface: #fbfbf9;
-  --surface-subtle: #f5f5f1;
-  --rail: #e6e7e2;
-  --ink: #222320;
-  --muted: #565951;
-  --line: #cfd1c9;
-  --control-line: #8a8c81;
-  --accent: #a63822;
-  --accent-hover: #842c19;
-  --accent-soft: #f6e4da;
-  --accent-ink: #fffaf6;
-  --danger: #9b2838;
-  --danger-soft: #f7e1e3;
-  --scrim: rgb(28 29 24 / 46%);
-  --shadow: rgb(28 29 24 / 22%);
-  --radius: 0.5rem;
-  --radius-inner: 0.375rem;
+  --canvas: #f2f4f7;
+  --surface: #fbfcfe;
+  --surface-subtle: #f6f7f9;
+  --rail: #e9edf2;
+  --ink: #222831;
+  --muted: #5b6472;
+  --line: #d7dde5;
+  --control-line: #8792a1;
+  --accent: #365f91;
+  --accent-hover: #294c76;
+  --accent-soft: #e7edf5;
+  --accent-ink: #f8fbff;
+  --danger: #9c3541;
+  --danger-soft: #f8e9eb;
+  --scrim: rgb(19 27 39 / 44%);
+  --shadow: rgb(30 46 68 / 18%);
+  --radius: 0.75rem;
+  --radius-inner: 0.5rem;
   --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --canvas: #191a18;
-    --surface: #252621;
-    --surface-subtle: #1e201c;
-    --rail: #20211e;
-    --ink: #efefe9;
-    --muted: #b9bbaf;
-    --line: #3f423a;
-    --control-line: #828578;
-    --accent: #f59576;
-    --accent-hover: #ffb198;
-    --accent-soft: #422821;
-    --accent-ink: #27150f;
-    --danger: #ffaaaf;
-    --danger-soft: #46272b;
-    --scrim: rgb(13 14 12 / 72%);
-    --shadow: rgb(13 14 12 / 52%);
+    --canvas: #171a1f;
+    --surface: #20252c;
+    --surface-subtle: #1b2026;
+    --rail: #1c2128;
+    --ink: #edf0f4;
+    --muted: #aeb7c2;
+    --line: #363f4a;
+    --control-line: #748295;
+    --accent: #8db4df;
+    --accent-hover: #aad0f2;
+    --accent-soft: #283a4f;
+    --accent-ink: #152336;
+    --danger: #f0a3ab;
+    --danger-soft: #44272c;
+    --scrim: rgb(8 12 18 / 70%);
+    --shadow: rgb(5 9 15 / 48%);
   }
 }
 
@@ -59,13 +59,26 @@ p {
   margin: 0;
 }
 
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+button,
+input,
+select,
+summary {
+  -webkit-tap-highlight-color: transparent;
+}
+
 .app-width {
-  width: min(100% - clamp(2rem, 8vw, 6rem), 70rem);
+  width: min(100% - clamp(2rem, 6vw, 5rem), 72rem);
   margin-inline: auto;
 }
 
 .top-bar {
   border-bottom: 1px solid var(--line);
+  background: var(--surface);
 }
 
 .app-header,
@@ -80,15 +93,15 @@ p {
 
 .app-header {
   justify-content: space-between;
-  min-height: 3.75rem;
-  padding-block: 0.5rem;
+  min-height: 4rem;
+  padding-block: 0.625rem;
 }
 
 .brand {
   gap: 0.625rem;
-  font-size: 1.225rem;
-  font-weight: 720;
-  letter-spacing: -0.035em;
+  font-size: 1.175rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
 }
 
 .icon {
@@ -113,85 +126,92 @@ p {
 }
 
 main {
-  padding-block: clamp(1.375rem, 3.5vw, 3rem);
+  padding-block: clamp(1.75rem, 4vw, 3rem) 4rem;
 }
 
 .workspace-title {
-  margin-bottom: clamp(1rem, 2.5vw, 1.75rem);
+  margin-bottom: clamp(1.25rem, 2.5vw, 1.75rem);
 }
 
 h1 {
-  font-size: clamp(2rem, 5.25vw, 3.25rem);
-  line-height: 1.16;
-  letter-spacing: -0.05em;
-  font-weight: 750;
-}
-
-h1 span {
-  color: var(--accent);
+  font-size: clamp(1.875rem, 4vw, 2.5rem);
+  line-height: 1.2;
+  letter-spacing: -0.04em;
+  font-weight: 720;
 }
 
 .workspace-title p {
-  margin-top: 0.55rem;
+  margin-top: 0.5rem;
   color: var(--muted);
   font-size: 0.925rem;
 }
 
 h2 {
   font-size: 1rem;
+  font-weight: 680;
 }
 
 h3 {
-  font-size: 0.95rem;
+  font-size: 0.925rem;
   font-weight: 650;
   overflow-wrap: anywhere;
 }
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(13.75rem, 0.56fr);
-  gap: clamp(1.25rem, 4vw, 3.5rem);
+  grid-template-columns: minmax(0, 1.65fr) minmax(17rem, 0.85fr);
+  align-items: start;
+  gap: clamp(1.25rem, 3vw, 2rem);
 }
 
 .composer,
 .queue-panel {
   min-width: 0;
-}
-
-.source-section {
-  padding: 0.875rem 1rem 0.625rem;
   border: 1px solid var(--line);
-  border-top: 3px solid var(--accent);
   border-radius: var(--radius);
   background: var(--surface);
 }
 
-.output-section {
-  margin-top: 0.875rem;
+.composer {
+  box-shadow: 0 1px 2px rgb(30 46 68 / 3%);
 }
 
-.source-section h2,
-.output-section h2 {
-  margin-bottom: 0.375rem;
+.source-section,
+.output-section {
+  padding: clamp(1.25rem, 3vw, 1.75rem);
+}
+
+.output-section {
+  border-top: 1px solid var(--line);
+}
+
+.section-heading {
+  margin-bottom: 1.125rem;
+}
+
+.section-heading p {
+  margin-top: 0.3rem;
+  color: var(--muted);
+  font-size: 0.875rem;
 }
 
 .source-label {
   display: block;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.45rem;
 }
 
 label,
 .option-label {
   font-size: 0.875rem;
-  font-weight: 650;
+  font-weight: 620;
 }
 
 input,
 select,
 button {
-  min-height: 2.625rem;
+  min-height: 2.75rem;
   min-width: 0;
-  padding: 0.5rem 0.75rem;
+  padding: 0.5625rem 0.8125rem;
   border: 1px solid var(--control-line);
   border-radius: var(--radius-inner);
   background: var(--surface);
@@ -206,6 +226,23 @@ button {
 
 input::placeholder {
   color: var(--muted);
+  opacity: 1;
+}
+
+input:hover:not(:disabled),
+select:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+input:disabled,
+select:disabled {
+  cursor: not-allowed;
+  background: var(--surface-subtle);
+  opacity: 0.7;
+}
+
+select {
+  cursor: pointer;
 }
 
 button {
@@ -230,15 +267,20 @@ button:active:not(:disabled) {
 
 button:disabled {
   cursor: default;
+  border-color: var(--line);
   background: var(--surface-subtle);
   color: var(--muted);
-  opacity: 0.75;
+  opacity: 0.7;
 }
 
 button.quiet {
   border-color: transparent;
   background: transparent;
   color: var(--ink);
+}
+
+button.quiet:hover:not(:disabled) {
+  border-color: transparent;
 }
 
 button.quiet:disabled {
@@ -282,7 +324,7 @@ button.primary:disabled {
 
 .link-row {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.625rem;
 }
 
 .link-field {
@@ -293,7 +335,7 @@ button.primary:disabled {
 
 .link-field input {
   width: 100%;
-  padding-inline-start: 2.25rem;
+  padding-inline-start: 2.4rem;
 }
 
 .link-field input[aria-invalid="true"] {
@@ -302,7 +344,7 @@ button.primary:disabled {
 
 .link-field .icon {
   position: absolute;
-  inset: 0 auto 0 0.75rem;
+  inset: 0 auto 0 0.875rem;
   margin-block: auto;
   width: 1rem;
   height: 1rem;
@@ -312,14 +354,15 @@ button.primary:disabled {
 
 .link-row button {
   flex: 0 0 auto;
-  min-inline-size: 4.5rem;
+  min-inline-size: 6rem;
 }
 
 .local-video {
   min-height: 2.25rem;
-  margin-top: 0.25rem;
-  margin-inline-start: -0.375rem;
-  padding-inline: 0.375rem;
+  margin-top: 0.5rem;
+  margin-inline-start: -0.5rem;
+  padding-inline: 0.5rem;
+  color: var(--muted);
 }
 
 .local-video .icon,
@@ -333,24 +376,24 @@ button.primary:disabled {
 }
 
 .media {
-  margin-top: 0.625rem;
-  padding: 0.75rem;
+  margin-top: 1rem;
+  padding: 0.875rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-inner);
   background: var(--surface-subtle);
 }
 
 .media-heading {
-  gap: 0.625rem;
+  gap: 0.875rem;
 }
 
 .media-heading img,
 .media-fallback {
   flex: 0 0 auto;
-  width: 5.5rem;
+  width: 6.5rem;
   aspect-ratio: 16 / 9;
   object-fit: cover;
-  border-radius: var(--radius-inner);
+  border-radius: calc(var(--radius-inner) - 0.125rem);
   background: var(--line);
 }
 
@@ -368,9 +411,9 @@ button.primary:disabled {
 
 .skeleton-line {
   display: block;
-  width: min(6rem, 80%);
+  width: min(8rem, 80%);
   height: 0.375rem;
-  margin-top: 0.5rem;
+  margin-top: 0.625rem;
   border-radius: var(--radius-inner);
 }
 
@@ -379,9 +422,13 @@ button.primary:disabled {
   min-width: 0;
 }
 
+.media-title .muted {
+  margin-top: 0.25rem;
+}
+
 .icon-button {
   flex: 0 0 auto;
-  width: 2.625rem;
+  width: 2.75rem;
   padding: 0;
 }
 
@@ -403,7 +450,9 @@ legend {
 }
 
 .parts {
-  margin-top: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--line);
 }
 
 .parts legend {
@@ -415,6 +464,7 @@ legend {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  min-height: 2.5rem;
 }
 
 .parts-heading button {
@@ -422,11 +472,14 @@ legend {
 }
 
 .parts-list {
-  max-height: 11rem;
+  max-height: 12rem;
   overflow-y: auto;
   padding: 0.25rem;
+  border: 1px solid var(--line);
   border-radius: var(--radius-inner);
   background: var(--surface);
+  scrollbar-color: var(--control-line) transparent;
+  scrollbar-width: thin;
 }
 
 .checkbox {
@@ -435,10 +488,11 @@ legend {
   gap: 0.625rem;
   min-height: 2.5rem;
   padding-inline: 0.5rem;
-  border-radius: var(--radius-inner);
+  border-radius: calc(var(--radius-inner) - 0.125rem);
   cursor: pointer;
   font-weight: 500;
   overflow-wrap: anywhere;
+  transition: background-color 140ms ease;
 }
 
 .checkbox:hover,
@@ -457,18 +511,19 @@ legend {
 
 .options {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(8.5rem, 0.6fr);
-  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1.25fr) minmax(9.5rem, 0.75fr);
+  gap: 0.875rem;
 }
 
 .option {
   display: grid;
-  gap: 0.25rem;
+  gap: 0.45rem;
   min-width: 0;
 }
 
 button.directory-choice {
   justify-content: flex-start;
+  font-weight: 500;
 }
 
 button.directory-choice span {
@@ -478,7 +533,9 @@ button.directory-choice span {
 }
 
 .advanced {
-  margin: 0.375rem 0;
+  margin-top: 0.875rem;
+  padding-top: 0.375rem;
+  border-top: 1px solid var(--line);
 }
 
 :is(.advanced, .task-details, .settings-advanced) summary {
@@ -493,10 +550,12 @@ button.directory-choice span {
   cursor: pointer;
   font-size: 0.875rem;
   font-weight: 550;
+  transition: color 140ms ease;
 }
 
 .advanced > summary {
-  min-height: 2.375rem;
+  width: 100%;
+  min-height: 2.5rem;
 }
 
 :is(.advanced, .task-details, .settings-advanced)
@@ -505,12 +564,12 @@ button.directory-choice span {
 }
 
 :is(.advanced, .task-details, .settings-advanced) summary:hover {
-  color: var(--accent);
+  color: var(--accent-hover);
 }
 
 :is(.advanced, .task-details, .settings-advanced) summary .icon {
-  width: 0.9rem;
-  height: 0.9rem;
+  width: 0.875rem;
+  height: 0.875rem;
   rotate: -90deg;
 }
 
@@ -520,17 +579,19 @@ button.directory-choice span {
 
 .advanced-selection {
   min-width: 0;
+  margin-inline-start: auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--muted);
+  font-size: 0.8rem;
   font-weight: 400;
 }
 
 .advanced-content {
   display: grid;
-  gap: 0.5rem;
-  padding: 0.25rem 0 0.375rem 1.375rem;
+  gap: 0.625rem;
+  padding: 0.25rem 0 0.125rem;
 }
 
 .composer-footer {
@@ -538,15 +599,16 @@ button.directory-choice span {
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 0.5rem 0.75rem;
-  padding-top: 0.875rem;
+  gap: 0.625rem 1rem;
+  padding: 1rem clamp(1.25rem, 3vw, 1.75rem);
   border-top: 1px solid var(--line);
+  background: var(--surface-subtle);
 }
 
 .generate {
-  min-height: 2.75rem;
-  padding-inline: 1rem;
-  gap: 0.875rem;
+  min-height: 2.875rem;
+  padding-inline: 1.125rem;
+  gap: 0.75rem;
 }
 
 .next-step {
@@ -554,7 +616,7 @@ button.directory-choice span {
 }
 
 .next-step:empty {
-  position: absolute;
+  display: none;
 }
 
 .composer-footer .error {
@@ -569,8 +631,8 @@ button.directory-choice span {
 }
 
 .notice {
-  padding: 0.625rem 0.875rem;
-  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-inner);
   background: var(--surface);
@@ -583,15 +645,12 @@ button.directory-choice span {
 }
 
 .source-section > .error {
-  margin-top: 0.375rem;
+  margin-top: 0.625rem;
 }
 
 .queue-panel {
-  align-self: start;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--rail);
-  --queue-inset: clamp(0.875rem, 2.5vw, 1.375rem);
+  position: sticky;
+  top: 1.5rem;
 }
 
 .queue-header {
@@ -600,7 +659,7 @@ button.directory-choice span {
   justify-content: space-between;
   flex-wrap: wrap;
   column-gap: 0.75rem;
-  padding: 0.875rem var(--queue-inset);
+  padding: 1.125rem 1.25rem;
   border-bottom: 1px solid var(--line);
 }
 
@@ -612,52 +671,38 @@ button.directory-choice span {
 }
 
 .queue-empty {
-  padding: 1rem var(--queue-inset) 1.25rem;
-}
-
-.queue-workflow {
   display: grid;
-  gap: 0.5rem;
-  margin: 1rem 0 0;
-  padding: 0;
-  list-style: none;
-  font-size: 0.875rem;
-  font-weight: 550;
+  justify-items: center;
+  padding: 2.5rem 1.5rem 2.75rem;
+  text-align: center;
 }
 
-.queue-workflow li {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-}
-
-.queue-workflow li:not(:last-child)::after {
-  position: absolute;
-  inset-inline-start: calc(1rem - 0.5px);
-  top: 100%;
-  width: 1px;
-  height: 0.5rem;
-  background: var(--control-line);
-  content: "";
-}
-
-.phase-icon {
+.queue-empty-icon {
   display: grid;
-  flex: 0 0 auto;
   place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border: 1px solid var(--line);
+  width: 2.75rem;
+  height: 2.75rem;
+  margin-bottom: 0.875rem;
   border-radius: var(--radius-inner);
-  background: var(--surface-subtle);
-  color: var(--muted);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.queue-empty-icon .icon {
+  width: 1.375rem;
+  height: 1.375rem;
+}
+
+.queue-empty p {
+  max-width: 16rem;
+  margin-top: 0.375rem;
+  line-height: 1.65;
 }
 
 .task {
   display: grid;
-  gap: 0.625rem;
-  padding: 0.875rem var(--queue-inset);
+  gap: 0.75rem;
+  padding: 1.125rem 1.25rem 1.25rem;
 }
 
 .task + .task {
@@ -671,7 +716,7 @@ button.directory-choice span {
 
 .task-progress {
   display: grid;
-  gap: 0.375rem;
+  gap: 0.45rem;
 }
 
 .phase-track {
@@ -701,8 +746,9 @@ button.directory-choice span {
 
 .task-parts {
   display: grid;
-  gap: 0.625rem;
-  padding: 0.625rem;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
   border-radius: var(--radius-inner);
   background: var(--surface-subtle);
 }
@@ -721,12 +767,13 @@ button.directory-choice span {
 
 .status {
   flex: 0 0 auto;
-  padding: 0.16rem 0.44rem;
+  padding: 0.2rem 0.5rem;
   border-radius: var(--radius-inner);
   background: var(--surface-subtle);
   color: var(--muted);
   font-size: 0.75rem;
   font-weight: 650;
+  line-height: 1.45;
 }
 
 .status[data-status="running"] {
@@ -735,7 +782,8 @@ button.directory-choice span {
 }
 
 .status[data-status="completed"] {
-  color: var(--ink);
+  background: var(--accent-soft);
+  color: var(--accent-hover);
 }
 
 .status:is([data-status="failed"], [data-status="partial"]) {
@@ -744,9 +792,16 @@ button.directory-choice span {
 }
 
 .output-path {
+  display: -webkit-box;
+  padding: 0.625rem 0.75rem;
+  overflow: hidden;
+  border-radius: var(--radius-inner);
+  background: var(--surface-subtle);
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .task-error {
@@ -755,8 +810,8 @@ button.directory-choice span {
 }
 
 .task-actions button {
-  min-height: 2.375rem;
-  padding: 0.375rem 0.625rem;
+  min-height: 2.5rem;
+  padding: 0.4375rem 0.75rem;
 }
 
 .actions {
@@ -768,7 +823,7 @@ button.directory-choice span {
 }
 
 .settings-dialog {
-  width: min(calc(100% - 2rem), 44rem);
+  width: min(calc(100% - 2rem), 46rem);
   max-height: calc(100% - 2rem);
   padding: 0;
   overflow: hidden;
@@ -791,7 +846,14 @@ button.directory-choice span {
 }
 
 .settings-trigger {
-  min-height: 2.25rem;
+  min-height: 2.5rem;
+  border-color: var(--line);
+}
+
+.settings-trigger[data-configured="false"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-hover);
 }
 
 .settings-trigger .icon {
@@ -802,39 +864,45 @@ button.directory-choice span {
   display: flex;
   align-items: start;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding: 1.125rem 1.25rem;
+  gap: 1rem;
+  padding: 1.375rem 1.5rem;
   border-bottom: 1px solid var(--line);
 }
 
 .settings-header h2 {
-  margin-bottom: 0.3rem;
+  margin-bottom: 0.375rem;
   font-size: 1.25rem;
 }
 
+.settings-header .muted {
+  max-width: 36rem;
+}
+
 .settings-header .icon-button {
-  margin: -0.25rem -0.25rem 0 0;
+  margin: -0.375rem -0.375rem 0 0;
 }
 
 .settings-body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
-  gap: 0.875rem;
-  padding: 0.875rem 1.25rem 1.25rem;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem 1.5rem;
   overflow-y: auto;
   overscroll-behavior: contain;
+  background: var(--surface-subtle);
 }
 
 .settings-fields {
-  padding: 0.625rem 0.875rem;
+  padding: 0.375rem 1rem 1rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-inner);
-  background: var(--surface-subtle);
+  background: var(--surface);
 }
 
 .settings-fields legend {
   padding-inline: 0.375rem;
+  font-size: 0.925rem;
 }
 
 .settings-fields :is(label, input, select) {
@@ -843,12 +911,12 @@ button.directory-choice span {
 }
 
 .settings-fields label {
-  margin-top: 0.625rem;
-  margin-bottom: 0.25rem;
+  margin-top: 0.875rem;
+  margin-bottom: 0.4rem;
 }
 
 .settings-fields > label:first-of-type {
-  margin-top: 0;
+  margin-top: 0.5rem;
 }
 
 .settings-catalog {
@@ -856,7 +924,7 @@ button.directory-choice span {
 }
 
 .settings-catalog button {
-  min-height: 2.25rem;
+  min-height: 2.375rem;
   margin-inline-start: -0.5rem;
   padding-inline: 0.5rem;
 }
@@ -866,13 +934,14 @@ button.directory-choice span {
 }
 
 .settings-advanced {
-  margin-top: 0.375rem;
+  margin-top: 0.625rem;
+  padding-top: 0.25rem;
   border-top: 1px solid var(--line);
 }
 
 .settings-advanced .advanced-content {
   display: block;
-  padding: 0;
+  padding: 0.375rem 0 0;
 }
 
 .settings-advanced label:first-child {
@@ -880,7 +949,7 @@ button.directory-choice span {
 }
 
 .settings-hint {
-  margin-top: 0.25rem;
+  margin-top: 0.375rem;
 }
 
 .settings-actions {
@@ -890,9 +959,9 @@ button.directory-choice span {
 .settings-footer {
   display: grid;
   gap: 0.625rem;
-  padding: 0.875rem 1.25rem;
+  padding: 1rem 1.5rem;
   border-top: 1px solid var(--line);
-  background: var(--surface-subtle);
+  background: var(--surface);
 }
 
 .settings-footer .error {
@@ -923,7 +992,12 @@ button.directory-choice span {
   .enter,
   .task-details[open] .task-parts,
   :is(.advanced, .settings-advanced)[open] .advanced-content {
-    animation: enter 180ms var(--ease-out);
+    animation: enter 200ms var(--ease-out);
+  }
+
+  .media-loading .media-fallback,
+  .media-loading .skeleton-line {
+    animation: loading-pulse 1.4s ease-in-out infinite alternate;
   }
 
   :is(.advanced, .task-details, .settings-advanced) summary .icon {
@@ -933,17 +1007,28 @@ button.directory-choice span {
   @keyframes enter {
     from {
       opacity: 0;
-      translate: 0 4px;
+      translate: 0 5px;
     }
   }
+
+  @keyframes loading-pulse {
+    from {
+      opacity: 0.5;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
   .settings-dialog {
     opacity: 0;
-    translate: 0 5px;
+    translate: 0 6px;
     transition:
       opacity 150ms ease,
-      translate 170ms var(--ease-out),
-      display 170ms,
-      overlay 170ms;
+      translate 180ms var(--ease-out),
+      display 180ms,
+      overlay 180ms;
     transition-behavior: allow-discrete;
   }
 
@@ -956,8 +1041,8 @@ button.directory-choice span {
     background-color: transparent;
     transition:
       background-color 150ms ease,
-      display 170ms,
-      overlay 170ms;
+      display 180ms,
+      overlay 180ms;
     transition-behavior: allow-discrete;
   }
 
@@ -968,7 +1053,7 @@ button.directory-choice span {
   @starting-style {
     .settings-dialog[open] {
       opacity: 0;
-      translate: 0 5px;
+      translate: 0 6px;
     }
 
     .settings-dialog[open]::backdrop {
@@ -977,27 +1062,88 @@ button.directory-choice span {
   }
 }
 
-@media (max-width: 43rem) {
+@media (max-width: 50rem) {
   .workspace {
     grid-template-columns: 1fr;
   }
+
+  .queue-panel {
+    position: static;
+  }
 }
 
-@media (max-width: 37rem) {
+@media (max-width: 37.5rem) {
+  .app-width {
+    width: min(100% - 2rem, 72rem);
+  }
+
+  main {
+    padding-block: 1.5rem 2.5rem;
+  }
+
   .settings-body {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 25rem) {
-  .next-step,
-  .generate {
-    flex-basis: 100%;
+@media (max-width: 30rem) {
+  .options {
+    grid-template-columns: 1fr;
+  }
+
+  .source-section,
+  .output-section {
+    padding: 1.125rem;
+  }
+
+  .composer-footer {
+    padding-inline: 1.125rem;
+  }
+
+  .media-heading img,
+  .media-fallback {
+    width: 5.5rem;
+  }
+
+  .settings-header,
+  .settings-body,
+  .settings-footer {
+    padding-inline: 1.125rem;
   }
 }
 
-@media (max-width: 22rem) {
-  .options {
+@media (max-width: 25rem) {
+  .app-header {
+    gap: 0.5rem;
+  }
+
+  .brand {
+    font-size: 1.05rem;
+  }
+
+  .settings-trigger {
+    padding-inline: 0.625rem;
+  }
+
+  .link-row {
+    display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .link-row button {
+    width: 100%;
+  }
+
+  .composer-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .next-step {
+    flex-basis: auto;
+  }
+
+  .generate {
+    width: 100%;
   }
 }

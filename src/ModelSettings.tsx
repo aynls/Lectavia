@@ -305,7 +305,12 @@ export function ModelSettings({
 
   return (
     <>
-      <button type="button" className="settings-trigger" onClick={openSettings}>
+      <button
+        type="button"
+        className="settings-trigger"
+        data-configured={configured}
+        onClick={openSettings}
+      >
         <Icon name="settings" />
         {configured ? "模型设置" : "配置模型"}
       </button>
@@ -324,8 +329,7 @@ export function ModelSettings({
             <div>
               <h2 id="settings-title">模型设置</h2>
               <p id="settings-description" className="muted">
-                配置语音转写和文稿整理的 OpenAI
-                兼容服务。密钥仅在本次运行期间保留。
+                分别配置语音转写和文稿整理服务。API Key 仅在本次运行期间保留。
               </p>
             </div>
             <button

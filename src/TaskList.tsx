@@ -16,10 +16,10 @@ const statusLabels = {
 };
 
 const phases = [
-  { id: "audio", label: "提取音轨", icon: "waveform" },
-  { id: "transcription", label: "语音转写", icon: "text" },
-  { id: "organization", label: "整理文稿", icon: "document" },
-  { id: "output", label: "保存文件", icon: "save" },
+  { id: "audio", label: "提取音轨" },
+  { id: "transcription", label: "语音转写" },
+  { id: "organization", label: "整理文稿" },
+  { id: "output", label: "保存文件" },
 ] as const;
 
 function partStatus(part: TaskPart) {
@@ -174,17 +174,11 @@ export function TaskList({ queue }: { queue: TaskQueue }) {
       </header>
       {tasks.length === 0 ? (
         <div className="queue-empty">
-          <p className="muted">暂无任务。提交后可在此查看进度和文稿。</p>
-          <ol className="queue-workflow" aria-label="处理流程" role="list">
-            {phases.map((phase) => (
-              <li key={phase.id}>
-                <span className="phase-icon">
-                  <Icon name={phase.icon} />
-                </span>
-                {phase.label}
-              </li>
-            ))}
-          </ol>
+          <span className="queue-empty-icon" aria-hidden="true">
+            <Icon name="document" />
+          </span>
+          <h3>还没有任务</h3>
+          <p className="muted">生成后可在这里查看进度并打开文稿。</p>
         </div>
       ) : (
         <ul className="tasks">

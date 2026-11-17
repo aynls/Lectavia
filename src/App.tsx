@@ -38,17 +38,17 @@ export default function App() {
   const previewKey = useRef("");
   const selected = new Set(selectedParts);
   const nextStep = justQueued
-    ? "已加入队列，可以继续添加视频。"
+    ? "已加入任务队列，可以继续添加视频。"
     : previewing
       ? ""
       : !media
-        ? "先选择要转写的视频。"
+        ? "选择视频后即可继续。"
         : selected.size === 0
           ? "请至少选择一个分 P。"
           : !folder
-            ? "请先选择保存目录。"
+            ? "请选择文稿的保存位置。"
             : !settings
-              ? "请先在右上角配置模型。"
+              ? "请先完成模型设置。"
               : "";
 
   function clearPreview() {
@@ -196,16 +196,17 @@ export default function App() {
         {!desktop && (
           <p className="notice">请在 Lectavia 桌面应用中处理视频。</p>
         )}
+        <div className="workspace-title">
+          <h1 id="workspace-title">视频转文稿</h1>
+          <p>转写并整理视频内容，保存为可编辑的 Markdown 或纯文本。</p>
+        </div>
         <div className="workspace">
           <section className="composer" aria-labelledby="workspace-title">
-            <div className="workspace-title">
-              <h1 id="workspace-title">
-                视频转<span>文稿</span>
-              </h1>
-              <p>转写视频语音，整理为 Markdown 或纯文本。</p>
-            </div>
             <section className="source-section" aria-labelledby="input-heading">
-              <h2 id="input-heading">导入视频</h2>
+              <div className="section-heading">
+                <h2 id="input-heading">选择视频</h2>
+                <p>粘贴视频链接，或从电脑中选择视频文件。</p>
+              </div>
               <form onSubmit={submitLink} noValidate>
                 <label className="source-label" htmlFor="video-url">
                   视频链接
@@ -240,7 +241,7 @@ export default function App() {
                     type="submit"
                     disabled={!desktop || !link.trim() || previewing}
                   >
-                    {previewing && link ? "读取中…" : "读取"}
+                    {previewing && link ? "读取中…" : "读取视频"}
                   </button>
                 </div>
               </form>
@@ -353,26 +354,28 @@ export default function App() {
               className="output-section"
               aria-labelledby="output-heading"
             >
-              <h2 id="output-heading">输出设置</h2>
+              <div className="section-heading">
+                <h2 id="output-heading">文稿设置</h2>
+              </div>
               <div className="options">
                 <div className="option">
-                  <span className="option-label">保存目录</span>
+                  <span className="option-label">保存位置</span>
                   <button
                     type="button"
                     className="directory-choice"
                     aria-label={
-                      folder ? `更改保存目录，当前为 ${folder}` : "选择保存目录"
+                      folder ? `更改保存位置，当前为 ${folder}` : "选择保存位置"
                     }
                     title={folder || undefined}
                     onClick={chooseFolder}
                     disabled={!desktop}
                   >
                     <Icon name="folder" />
-                    <span>{folder || "选择目录"}</span>
+                    <span>{folder || "选择保存目录"}</span>
                   </button>
                 </div>
                 <div className="option">
-                  <label htmlFor="output-format">输出格式</label>
+                  <label htmlFor="output-format">文件格式</label>
                   <select
                     id="output-format"
                     value={format}
@@ -388,12 +391,15 @@ export default function App() {
               <details className="advanced">
                 <summary>
                   <Icon name="down" />
-                  整理要求
+                  自定义整理要求
                   <small className="advanced-selection" title={prompt?.name}>
                     {prompt?.name ?? "可选"}
                   </small>
                 </summary>
                 <div className="advanced-content">
+                  <p className="muted">
+                    使用 Markdown 文件补充摘要、结构或措辞要求。
+                  </p>
                   <div className="actions">
                     <button
                       type="button"
