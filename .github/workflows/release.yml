@@ -1,0 +1,194 @@
+name: Build release draft
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+
+env:
+  RELEASE_TAG: ${{ github.ref_name }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage
+          - runner: macos-26
+            target: aarch64-apple-darwin
+            bundles: dmg
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Check tag and package versions
+        shell: bash
+        run: |
+          cargo metadata --manifest-path src-tauri/Cargo.toml --no-deps --format-version 1 > "$RUNNER_TEMP/lectavia-cargo.json"
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          const readJson = file => JSON.parse(readFileSync(file, 'utf8'));
+          const { version } = readJson('src-tauri/tauri.conf.json');
+          const { packages } = readJson(join(process.env.RUNNER_TEMP, 'lectavia-cargo.json'));
+          if (process.env.RELEASE_TAG !== `v${version}` || readJson('package.json').version !== version || packages[0].version !== version) {
+            throw new Error('Use v<version> and match the versions in tauri.conf.json, package.json, and Cargo.toml.');
+          }
+          NODE
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential nasm libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev libdbus-1-dev libssl-dev patchelf xdg-utils libfuse2
+
+      - uses: msys2/setup-msys2@v2
+        if: runner.os == 'Windows'
+        id: msys2
+        with:
+          msystem: UCRT64
+          update: true
+          install: curl diffutils make mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-nasm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Apple signing credentials
+        if: runner.os == 'macOS'
+        id: apple
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [[ -z "$APPLE_CERTIFICATE$APPLE_CERTIFICATE_PASSWORD$APPLE_ID$APPLE_PASSWORD$APPLE_TEAM_ID" ]]; then
+            exit 0
+          fi
+          if [[ -z "$APPLE_CERTIFICATE" || -z "$APPLE_CERTIFICATE_PASSWORD" || -z "$APPLE_ID" || -z "$APPLE_PASSWORD" || -z "$APPLE_TEAM_ID" ]]; then
+            echo 'Set all five Apple signing and notarization secrets.' >&2
+            exit 1
+          fi
+          echo 'sign=true' >> "$GITHUB_OUTPUT"
+
+      - uses: Apple-Actions/import-codesign-certs@v7
+        if: steps.apple.outputs.sign == 'true'
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - name: Select Apple signing identity
+        if: steps.apple.outputs.sign == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          identity=$(security find-identity -v -p codesigning | awk -F '"' '/Developer ID Application:/ && !found {print $2; found = 1}')
+          if [[ -z "$identity" ]]; then
+            echo 'Import a Developer ID Application certificate.' >&2
+            exit 1
+          fi
+          {
+            echo "APPLE_SIGNING_IDENTITY=$identity"
+            echo "APPLE_ID=$APPLE_ID"
+            echo "APPLE_PASSWORD=$APPLE_PASSWORD"
+            echo "APPLE_TEAM_ID=$APPLE_TEAM_ID"
+          } >> "$GITHUB_ENV"
+
+      - name: Build installers
+        env:
+          MSYS2_ROOT: ${{ steps.msys2.outputs.msys2-location }}
+        run: pnpm tauri build --ci --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installers-${{ matrix.target }}
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe
+            src-tauri/target/${{ matrix.target }}/release/bundle/deb/*_amd64.deb
+            src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*_amd64.AppImage
+            src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*_aarch64.dmg
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+
+  release:
+    name: Create release draft
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: installers-*
+          path: installers
+          merge-multiple: true
+
+      - name: Attach the four installers
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          shopt -s globstar nullglob
+          assets=()
+          for suffix in _x64-setup.exe _amd64.deb _amd64.AppImage _aarch64.dmg; do
+            matches=(installers/**/*"$suffix")
+            if [[ "${#matches[@]}" != 1 || ! -s "${matches[0]:-}" ]]; then
+              echo "Expected exactly one non-empty installer ending in $suffix." >&2
+              exit 1
+            fi
+            assets+=("${matches[0]}")
+          done
+
+          draft=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" |
+            jq -sr --arg tag "$RELEASE_TAG" 'first(.[][] | select(.tag_name == $tag) | .draft)')
+          case "$draft" in
+            false)
+              echo "$RELEASE_TAG has already been published." >&2
+              exit 1
+              ;;
+            true)
+              gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+              ;;
+            "")
+              flags=()
+              if [[ "$RELEASE_TAG" == *-* ]]; then
+                flags+=(--prerelease)
+              fi
+              gh release create "$RELEASE_TAG" "${assets[@]}" --verify-tag --draft \
+                --title "Lectavia $RELEASE_TAG" --generate-notes "${flags[@]}"
+              ;;
+          esac

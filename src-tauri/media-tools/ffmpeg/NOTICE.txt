@@ -6,5 +6,5 @@ See dist/source for the license texts, corresponding source archives, and
 build script for the versions distributed with this application.
 
 FFmpeg includes code based on the work of the Independent JPEG Group.
-The bundled winpthreads runtime is from the mingw-w64 project. Its license is
+On Windows, the bundled winpthreads runtime is from the mingw-w64 project. Its license is
 included in dist/source/winpthreads-LICENSE.txt.

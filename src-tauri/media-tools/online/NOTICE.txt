@@ -6,9 +6,12 @@ https://github.com/yt-dlp/ejs
 See dist/yt-dlp-LICENSE.txt. The bundled challenge scripts contain license
 notices for Meriyah (ISC) and Astring (MIT).
 
-The Python embeddable distribution is from the Python Software Foundation.
+Python is from the Python Software Foundation.
 https://www.python.org/
-See dist/python/LICENSE.txt for the Python and third-party license notices.
+Windows ships the embeddable distribution (dist/python/LICENSE.txt).
+Linux and macOS ship Python Build Standalone from Astral.
+https://github.com/astral-sh/python-build-standalone
+The Python and third-party license notices are included in dist/python.
 
 QuickJS-NG is distributed under the MIT License.
 https://github.com/quickjs-ng/quickjs

@@ -2,7 +2,7 @@
 
 转写 Bilibili、YouTube 或本地视频中的语音，整理为可编辑的 Markdown 或纯文本文稿。
 
-Windows x64 安装包自带 yt-dlp、Python、QuickJS-NG、FFmpeg 和 FFprobe。安装后可直接处理 Bilibili、YouTube 和本地视频，无需另行安装这些工具或配置 PATH。
+Windows x64、Linux x64 和 Apple Silicon（macOS 26 及以上）的安装包自带 yt-dlp、Python、QuickJS-NG、FFmpeg 和 FFprobe。填写模型设置后即可处理 Bilibili、YouTube 和本地视频，无需另行安装媒体工具或配置 PATH。
 
 ## 本地开发
 
@@ -34,6 +34,7 @@ pnpm tauri dev
 在 Lectavia 桌面端保存模型设置后，用同一个系统账户运行 `lectavia-cli`。每次调用处理一个视频，桌面应用可以关闭。
 
 Windows 安装包将 `lectavia-cli.exe` 放在 Lectavia 的安装目录中，用完整路径或在该目录中运行。
+Linux 的 `.deb` 将 `lectavia-cli` 安装到 `/usr/bin`。macOS 对应的路径为 `/Applications/Lectavia.app/Contents/MacOS/lectavia-cli`。
 
 ### 使用示例
 
@@ -103,3 +104,22 @@ pacman -S --needed make diffutils mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_6
 若 MSYS2 装在 `C:\msys64` 以外，先在运行 `pnpm tauri build` 的 PowerShell 中将 `MSYS2_ROOT` 设为它的安装目录。首次构建会下载并校验 FFmpeg、LAME 源码，然后编译并打包。后续构建复用校验通过的产物。安装包内的 `media-tools/ffmpeg` 提供相应源码、构建脚本和 LGPL 许可文本。
 
 构建也会下载并校验固定版本的 yt-dlp、Python 嵌入包和 QuickJS-NG，再从 `media-tools/online` 一并打包。更新这些工具时，在 `scripts/prepare-online-media.ps1` 更新对应版本和 SHA-256，然后重新构建安装包。
+
+### Linux x64 和 Apple Silicon macOS 安装包
+
+Linux 构建在 Tauri 系统依赖之外需要 NASM 和 `xz-utils`。macOS 构建需要运行 macOS 26 或更高版本的 Apple Silicon Mac，以及 Xcode 命令行工具。构建时，同一个脚本使用 FFmpeg 和 LAME 源码为本机编译工具。`scripts/prepare-online-media.sh` 下载并校验 Python、yt-dlp 和 QuickJS-NG。更新 yt-dlp 或 QuickJS-NG 时，同步更新 Windows 和 Unix 脚本中的版本与校验值。
+
+```bash
+# Linux x64
+pnpm tauri build --bundles deb,appimage
+# Apple Silicon macOS
+pnpm tauri build --bundles dmg
+```
+
+### GitHub 发布
+
+在 `package.json`、`src-tauri/tauri.conf.json` 和 `src-tauri/Cargo.toml` 更新版本号，并同步更新 `src-tauri/Cargo.lock`。提交后，为该提交创建并推送对应标签，例如 `git tag v0.1.0`、`git push origin v0.1.0`。
+
+GitHub Actions 等三端构建都成功后，将 Windows `*_x64-setup.exe`、Linux `*_amd64.AppImage` 与 `*_amd64.deb`、macOS `*_aarch64.dmg` 放入同一份 Release 草稿。确认草稿内容后在 GitHub 手动发布。
+
+要让下载的 macOS 应用通过 Gatekeeper，请在 GitHub Actions 的仓库 Secrets 中配置 `APPLE_CERTIFICATE`（Base64 编码的 Developer ID Application `.p12`）、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_ID`、`APPLE_PASSWORD`（应用专用密码）和 `APPLE_TEAM_ID`。默认构建使用临时签名，首次打开时可能需要在「隐私与安全性」中手动放行。

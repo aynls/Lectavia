@@ -1,0 +1,12 @@
+{
+  "build": {
+    "beforeBuildCommand": "bash scripts/build-ffmpeg.sh && bash scripts/prepare-online-media.sh && bash scripts/sign-macos-media.sh && pnpm build"
+  },
+  "bundle": {
+    "resources": ["media-tools/ffmpeg", "media-tools/online"],
+    "macOS": {
+      "minimumSystemVersion": "26.0",
+      "signingIdentity": "-"
+    }
+  }
+}

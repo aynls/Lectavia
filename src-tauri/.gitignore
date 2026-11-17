@@ -6,6 +6,6 @@
 # will have schema files for capabilities auto-completion
 /gen/schemas
 
-# Media tools prepared for Windows installers
+# Media tools prepared for installers
 /media-tools/ffmpeg/dist/
 /media-tools/online/dist/

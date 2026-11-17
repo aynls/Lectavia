@@ -56,9 +56,18 @@ pub struct MediaTools {
 impl MediaTools {
     pub fn cli() -> Self {
         Self {
-            resource_dir: env::current_exe()
-                .ok()
-                .and_then(|path| path.parent().map(Path::to_path_buf)),
+            resource_dir: env::current_exe().ok().and_then(|path| {
+                let directory = path.parent()?;
+                #[cfg(target_os = "macos")]
+                if directory.ends_with("Contents/MacOS") {
+                    return Some(directory.with_file_name("Resources"));
+                }
+                #[cfg(target_os = "linux")]
+                if directory.ends_with("usr/bin") {
+                    return Some(directory.with_file_name("lib").join("Lectavia"));
+                }
+                Some(directory.to_path_buf())
+            }),
             local_data_dir: None,
             require_bundled: false,
         }
@@ -69,7 +78,7 @@ impl MediaTools {
         Self {
             resource_dir: app.path().resource_dir().ok(),
             local_data_dir: app.path().app_local_data_dir().ok(),
-            require_bundled: !cfg!(debug_assertions),
+            require_bundled: !cfg!(debug_assertions) && !tauri::is_dev(),
         }
     }
 }
@@ -114,12 +123,12 @@ fn platform_url(input: &str, youtube: bool) -> Result<Url, AppError> {
     Ok(url)
 }
 
+fn tool_filename(program: &str) -> String {
+    format!("{program}{}", env::consts::EXE_SUFFIX)
+}
+
 fn find_tool(tools: &MediaTools, program: &str) -> Option<PathBuf> {
-    let filename = if cfg!(windows) {
-        format!("{program}.exe")
-    } else {
-        program.to_string()
-    };
+    let filename = tool_filename(program);
     let mut directories = Vec::new();
     if let Some(directory) = env::var_os("LECTAVIA_MEDIA_DIR") {
         directories.push(PathBuf::from(directory));
@@ -147,21 +156,15 @@ fn require_tool(tools: &MediaTools, program: &str) -> Result<PathBuf, AppError> 
 }
 
 fn require_ffmpeg(tools: &MediaTools) -> Result<PathBuf, AppError> {
-    #[cfg(all(windows, target_arch = "x86_64"))]
-    {
-        let bundled = tools
-            .resource_dir
-            .as_ref()
-            .map(|directory| directory.join("media-tools/ffmpeg/dist/bin"));
-        if let Some(directory) = bundled.filter(|path| path.join("ffprobe.exe").is_file()) {
-            let ffmpeg = directory.join("ffmpeg.exe");
-            if ffmpeg.is_file() {
-                return Ok(ffmpeg);
-            }
+    if let Some(resources) = &tools.resource_dir {
+        let directory = resources.join("media-tools/ffmpeg/dist/bin");
+        let ffmpeg = directory.join(tool_filename("ffmpeg"));
+        if ffmpeg.is_file() && directory.join(tool_filename("ffprobe")).is_file() {
+            return Ok(ffmpeg);
         }
-        if tools.require_bundled {
-            return Err("error.missingBundledFfmpeg".into());
-        }
+    }
+    if tools.require_bundled {
+        return Err("error.missingBundledFfmpeg".into());
     }
 
     require_tool(tools, "ffmpeg")
@@ -202,28 +205,29 @@ fn add_js_runtime(command: &mut Command, name: &str, path: &Path) {
 }
 
 fn online_media_command(tools: &MediaTools, youtube: bool) -> Result<Command, AppError> {
-    #[cfg(all(windows, target_arch = "x86_64"))]
-    {
-        if let Some(resources) = &tools.resource_dir {
-            let directory = resources.join("media-tools/online/dist");
-            let python = directory.join("python/python.exe");
-            let yt_dlp = directory.join("yt-dlp.pyz");
-            let quickjs = directory.join("qjs.exe");
-            if python.is_file() && yt_dlp.is_file() && (!youtube || quickjs.is_file()) {
-                let mut command = Command::new(python);
-                command
-                    .args(["-I", "-B"])
-                    .arg(yt_dlp)
-                    .arg("--no-js-runtimes");
-                if youtube {
-                    add_js_runtime(&mut command, "quickjs", &quickjs);
-                }
-                return Ok(command);
+    if let Some(resources) = &tools.resource_dir {
+        let directory = resources.join("media-tools/online/dist");
+        let python = directory.join(if cfg!(windows) {
+            "python/python.exe"
+        } else {
+            "python/bin/python3.14"
+        });
+        let yt_dlp = directory.join("yt-dlp.pyz");
+        let quickjs = directory.join(tool_filename("qjs"));
+        if python.is_file() && yt_dlp.is_file() && (!youtube || quickjs.is_file()) {
+            let mut command = Command::new(python);
+            command
+                .args(["-I", "-B"])
+                .arg(yt_dlp)
+                .arg("--no-js-runtimes");
+            if youtube {
+                add_js_runtime(&mut command, "quickjs", &quickjs);
             }
+            return Ok(command);
         }
-        if tools.require_bundled {
-            return Err("error.missingBundledOnlineMedia".into());
-        }
+    }
+    if tools.require_bundled {
+        return Err("error.missingBundledOnlineMedia".into());
     }
 
     let mut command = Command::new(require_tool(tools, "yt-dlp")?);
