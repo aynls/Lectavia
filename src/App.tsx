@@ -20,9 +20,12 @@ import {
 } from "./i18n";
 import { Icon } from "./Icon";
 import {
+  addInstructionPreset,
   loadInstructionPresets,
-  saveInstructionPreset,
+  storeInstructionPresets,
+  type InstructionPreset,
 } from "./instruction-presets";
+import { InstructionPresetSettings } from "./InstructionPresetSettings";
 import { inspectMedia, partLabel, type MediaInfo } from "./media";
 import {
   defaultModelSettings,
@@ -315,14 +318,18 @@ export default function App({
     }
   }
 
+  function pickPromptFile() {
+    return invoke<PromptFile | null>("choose_prompt_file", {
+      title: t("output.promptDialog"),
+      filterName: t("common.markdownFilter"),
+    });
+  }
+
   async function choosePrompt() {
     const revision = workspaceRevision.current;
     setInstructionsError(undefined);
     try {
-      const file = await invoke<PromptFile | null>("choose_prompt_file", {
-        title: t("output.promptDialog"),
-        filterName: t("common.markdownFilter"),
-      });
+      const file = await pickPromptFile();
       if (file && revision === workspaceRevision.current) {
         setImportedPrompt(file);
         setPresetId("");
@@ -346,12 +353,18 @@ export default function App({
     setInstructionsError(undefined);
   }
 
+  function updatePresets(next: InstructionPreset[]) {
+    storeInstructionPresets(next);
+    setPresets(next);
+    setPresetId((id) => (next.some((entry) => entry.id === id) ? id : ""));
+  }
+
   function savePreset() {
     if (!canSavePreset) return;
     setInstructionsError(undefined);
     try {
-      const saved = saveInstructionPreset(instructions, prompt);
-      setPresets(saved.presets);
+      const saved = addInstructionPreset(presets, instructions, prompt);
+      if (saved.presets !== presets) updatePresets(saved.presets);
       setPresetId(saved.selectedId);
     } catch {
       setInstructionsError(message("error.saveInstructionPreset"));
@@ -372,9 +385,7 @@ export default function App({
     setSourceMode(source.kind === "local" ? "local" : "link");
     setLink(request.link);
     previewKey.current =
-      source.kind === "local"
-        ? source.path
-        : (URL.parse(request.link.trim())?.href ?? "");
+      source.kind === "local" ? source.path : (request.media.sourceUrl ?? "");
     setMedia(request.media);
     setSelectedParts(request.selectedParts);
     setDraftInstructions(request.instructions);
@@ -453,12 +464,12 @@ export default function App({
     <>
       <header className="top-bar">
         <div className="app-width app-header">
-          <div className="brand">
+          <h1 className="brand">
             <span className="brand-mark" aria-hidden="true">
               <img src={logoUrl} alt="" />
             </span>
             Lectavia
-          </div>
+          </h1>
           <div className="header-controls">
             <label className="language-picker">
               <span className="sr-only">{t("common.language")}</span>
@@ -477,6 +488,11 @@ export default function App({
                 ))}
               </select>
             </label>
+            <InstructionPresetSettings
+              presets={presets}
+              onChange={updatePresets}
+              onPickFile={desktop ? pickPromptFile : undefined}
+            />
             <ModelSettings
               value={settings ?? defaultModelSettings}
               configured={settings !== null}
@@ -491,404 +507,403 @@ export default function App({
           </div>
         </div>
       </header>
-      <main className="app-width">
+      <main className="app-width app-main">
         {!desktop && <p className="notice">{t("workspace.desktopRequired")}</p>}
-        <div className="workspace-title">
-          <h1 id="workspace-title" className="sr-only">
-            {t("workspace.title")}
-          </h1>
-          <div className="workspace-art" aria-hidden="true">
-            <div className="art-window">
-              <div className="art-screen">
-                <span />
-                <span />
-                <span />
-              </div>
-              <div className="art-captions">
-                <span />
-                <span />
-              </div>
-            </div>
-            <div className="signal-script">
-              <div className="signal-bars">
-                {Array.from({ length: 9 }, (_, index) => (
-                  <span key={index} />
-                ))}
-              </div>
-              <Icon name="arrow" />
-              <div className="script-lines">
-                <span />
-                <span />
-                <span />
-              </div>
-            </div>
-          </div>
-        </div>
         <div className="workspace">
           <section
             ref={composer}
             tabIndex={-1}
             className="composer"
-            aria-labelledby="workspace-title"
+            aria-label={t("workspace.label")}
           >
-            <section className="source-section" aria-labelledby="input-heading">
-              <div className="section-heading">
-                <h2 id="input-heading">{t("media.choose")}</h2>
-                <p>{t("media.intro")}</p>
-              </div>
-              <div
-                className="source-tabs"
-                role="tablist"
-                aria-label={t("media.source")}
+            <div className="composer-body">
+              <section
+                className="source-section"
+                aria-labelledby="input-heading"
               >
-                <button
-                  id="link-tab"
-                  type="button"
-                  role="tab"
-                  aria-selected={sourceMode === "link"}
-                  aria-controls="source-panel"
-                  data-active={sourceMode === "link"}
-                  onClick={() => switchSource("link")}
-                >
-                  <Icon name="link" />
-                  {t("media.linkTab")}
-                </button>
-                <button
-                  id="local-tab"
-                  type="button"
-                  role="tab"
-                  aria-selected={sourceMode === "local"}
-                  aria-controls="source-panel"
-                  data-active={sourceMode === "local"}
-                  onClick={() => switchSource("local")}
-                >
-                  <Icon name="video" />
-                  {t("media.localTab")}
-                </button>
-              </div>
-              <div
-                id="source-panel"
-                className="source-panel"
-                role="tabpanel"
-                aria-labelledby={
-                  sourceMode === "link" ? "link-tab" : "local-tab"
-                }
-              >
-                {sourceMode === "link" ? (
-                  <form onSubmit={submitLink} noValidate>
-                    <label className="source-label" htmlFor="video-url">
-                      {t("media.linkLabel")}
-                    </label>
-                    <div className="link-row">
-                      <div className="link-field">
-                        <Icon name="link" />
-                        <input
-                          ref={linkInput}
-                          id="video-url"
-                          name="video-url"
-                          type="url"
-                          autoCapitalize="none"
-                          autoCorrect="off"
-                          spellCheck={false}
-                          placeholder={t("media.linkPlaceholder")}
-                          value={link}
-                          disabled={!desktop}
-                          aria-invalid={Boolean(link && sourceError)}
-                          aria-describedby={
-                            link && sourceError ? "source-error" : undefined
-                          }
-                          onBlur={() => previewLink(link)}
-                          onPaste={pasteLink}
-                          onChange={(event) => changeLink(event.target.value)}
-                        />
-                      </div>
-                      <button
-                        type="submit"
-                        className="parse-button"
-                        disabled={!desktop || !link.trim() || previewing}
-                      >
-                        {t(previewing ? "media.inspecting" : "media.inspect")}
-                      </button>
-                    </div>
-                  </form>
-                ) : (
-                  <button
-                    type="button"
-                    className="local-picker"
-                    onClick={chooseVideo}
-                    disabled={!desktop}
+                <header className="source-heading">
+                  <h2 id="input-heading">{t("media.choose")}</h2>
+                  <div
+                    className="source-tabs"
+                    role="tablist"
+                    aria-label={t("media.source")}
                   >
-                    <span className="local-picker-icon">
-                      <Icon name="video" />
-                    </span>
-                    <span className="local-picker-copy">
-                      <strong>
-                        {t(
-                          localMedia
-                            ? "media.reselectFile"
-                            : "media.chooseFile",
-                        )}
-                      </strong>
-                      <small>{t("media.formats")}</small>
-                    </span>
-                    <Icon name="arrow" />
-                  </button>
-                )}
-              </div>
-              {previewing && (
-                <div
-                  className="media media-loading media-heading enter"
-                  role="status"
-                >
-                  <span className="media-fallback" aria-hidden="true" />
-                  <div className="media-title">
-                    <p className="muted">{t("media.loading")}</p>
-                    <span className="skeleton-line" aria-hidden="true" />
-                  </div>
-                </div>
-              )}
-              {sourceError && (
-                <p
-                  id="source-error"
-                  className="error source-error"
-                  role="alert"
-                >
-                  {renderMessage(t, sourceError)}
-                </p>
-              )}
-              {media && (
-                <div className="media enter" key={previewKey.current}>
-                  <div className="media-heading">
-                    {media.thumbnail && (
-                      <img
-                        src={media.thumbnail}
-                        alt=""
-                        referrerPolicy="no-referrer"
-                      />
-                    )}
-                    {!media.thumbnail && (
-                      <span className="media-fallback">
-                        <Icon name="video" />
-                      </span>
-                    )}
-                    <div className="media-title">
-                      <p className="media-ready">
-                        <Icon name="check" />
-                        {t("media.readyToGenerate")}
-                      </p>
-                      <h3>{media.title}</h3>
-                      <p className="muted">
-                        {media.uploader ??
-                          (localMedia
-                            ? t("media.local")
-                            : t("media.partsCount", {
-                                count: media.parts.length,
-                              }))}
-                      </p>
-                    </div>
                     <button
+                      id="link-tab"
                       type="button"
-                      className="quiet icon-button"
-                      aria-label={t("media.remove")}
-                      title={t("media.remove")}
-                      onClick={removeVideo}
+                      role="tab"
+                      aria-selected={sourceMode === "link"}
+                      aria-controls="source-panel"
+                      data-active={sourceMode === "link"}
+                      onClick={() => switchSource("link")}
                     >
-                      <Icon name="close" />
+                      <Icon name="link" />
+                      {t("media.linkTab")}
+                    </button>
+                    <button
+                      id="local-tab"
+                      type="button"
+                      role="tab"
+                      aria-selected={sourceMode === "local"}
+                      aria-controls="source-panel"
+                      data-active={sourceMode === "local"}
+                      onClick={() => switchSource("local")}
+                    >
+                      <Icon name="video" />
+                      {t("media.localTab")}
                     </button>
                   </div>
-                  {media.multipart && (
-                    <fieldset className="parts">
-                      <legend>{t("media.selectParts")}</legend>
-                      <div className="parts-heading">
-                        <p className="muted" role="status">
-                          {t("media.selected", {
-                            selected: selected.size,
-                            total: media.parts.length,
-                          })}
-                        </p>
-                        <button
-                          type="button"
-                          className="quiet"
-                          onClick={() =>
-                            setSelectedParts(
-                              selected.size === media.parts.length
-                                ? []
-                                : media.parts.map((part) => part.id),
-                            )
-                          }
-                        >
-                          {t(
-                            selected.size === media.parts.length
-                              ? "media.deselectAll"
-                              : "media.selectAll",
-                          )}
-                        </button>
-                      </div>
-                      <div className="parts-list">
-                        {media.parts.map((part) => (
-                          <label className="checkbox" key={part.id}>
-                            <input
-                              type="checkbox"
-                              checked={selected.has(part.id)}
-                              onChange={(event) => {
-                                const checked = event.target.checked;
-                                setSelectedParts((current) =>
-                                  checked
-                                    ? [...current, part.id]
-                                    : current.filter((id) => id !== part.id),
-                                );
-                              }}
-                            />
-                            {partLabel(part, t)}
-                          </label>
-                        ))}
-                      </div>
-                    </fieldset>
-                  )}
-                </div>
-              )}
-            </section>
-            <section
-              className="output-section"
-              aria-labelledby="output-heading"
-            >
-              <div className="section-heading">
-                <h2 id="output-heading">{t("output.settings")}</h2>
-                <p>{t("output.intro")}</p>
-              </div>
-              <div className="options">
-                <div className="option">
-                  <span className="option-label">{t("output.location")}</span>
-                  <button
-                    type="button"
-                    className="directory-choice"
-                    aria-label={
-                      folder
-                        ? t("output.changeLocation", { folder })
-                        : t("output.chooseLocation")
+                </header>
+                <div className="source-controls">
+                  <div
+                    id="source-panel"
+                    className="source-panel"
+                    role="tabpanel"
+                    aria-labelledby={
+                      sourceMode === "link" ? "link-tab" : "local-tab"
                     }
-                    title={folder || undefined}
-                    onClick={chooseFolder}
-                    disabled={!desktop}
                   >
-                    <Icon name="folder" />
-                    <span>
-                      {folder ||
-                        (folderStatus === "checking"
-                          ? t("output.preparingFolder")
-                          : t("output.chooseFolder"))}
-                    </span>
-                    <Icon name="down" />
-                  </button>
-                  {folderError && (
-                    <p className="error field-error" role="alert">
-                      {renderMessage(t, folderError)}
+                    {sourceMode === "link" ? (
+                      <form onSubmit={submitLink} noValidate>
+                        <label className="source-label" htmlFor="video-url">
+                          {t("media.linkLabel")}
+                        </label>
+                        <div className="link-row">
+                          <div className="link-field">
+                            <Icon name="link" />
+                            <input
+                              ref={linkInput}
+                              id="video-url"
+                              name="video-url"
+                              type="url"
+                              autoCapitalize="none"
+                              autoCorrect="off"
+                              spellCheck={false}
+                              placeholder={t("media.linkPlaceholder")}
+                              value={link}
+                              disabled={!desktop}
+                              aria-invalid={Boolean(link && sourceError)}
+                              aria-describedby={
+                                link && sourceError ? "source-error" : undefined
+                              }
+                              onBlur={() => previewLink(link)}
+                              onPaste={pasteLink}
+                              onChange={(event) =>
+                                changeLink(event.target.value)
+                              }
+                            />
+                          </div>
+                          <button
+                            type="submit"
+                            className="parse-button"
+                            disabled={!desktop || !link.trim() || previewing}
+                          >
+                            {t(
+                              previewing ? "media.inspecting" : "media.inspect",
+                            )}
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        className="local-picker"
+                        onClick={chooseVideo}
+                        disabled={!desktop}
+                      >
+                        <span className="local-picker-icon">
+                          <Icon name="video" />
+                        </span>
+                        <span className="local-picker-copy">
+                          <strong>
+                            {t(
+                              localMedia
+                                ? "media.reselectFile"
+                                : "media.chooseFile",
+                            )}
+                          </strong>
+                          <small>{t("media.formats")}</small>
+                        </span>
+                        <Icon name="arrow" />
+                      </button>
+                    )}
+                  </div>
+                  {previewing && (
+                    <div
+                      className="media media-loading media-heading enter"
+                      role="status"
+                    >
+                      <span className="media-fallback" aria-hidden="true" />
+                      <div className="media-title">
+                        <p className="muted">{t("media.loading")}</p>
+                        <span className="skeleton-line" aria-hidden="true" />
+                      </div>
+                    </div>
+                  )}
+                  {sourceError && (
+                    <p id="source-error" className="error" role="alert">
+                      {renderMessage(t, sourceError)}
                     </p>
                   )}
-                </div>
-                <div className="option">
-                  <label htmlFor="output-format">{t("output.format")}</label>
-                  <select
-                    name="output-format"
-                    id="output-format"
-                    value={format}
-                    onChange={(event) =>
-                      setFormat(event.target.value === "txt" ? "txt" : "md")
-                    }
-                  >
-                    <option value="md">{t("common.markdown")}</option>
-                    <option value="txt">{t("common.plainText")}</option>
-                  </select>
-                </div>
-              </div>
-              <div className="instructions-field">
-                <div className="field-label-row">
-                  {prompt ? (
-                    <span className="option-label">
-                      {t("output.instructions")}
-                    </span>
-                  ) : (
-                    <label htmlFor="custom-instructions">
-                      {t("output.instructions")}
-                    </label>
+                  {media && (
+                    <div className="media enter" key={previewKey.current}>
+                      <div className="media-heading">
+                        {media.thumbnail && (
+                          <img
+                            src={media.thumbnail}
+                            alt=""
+                            referrerPolicy="no-referrer"
+                          />
+                        )}
+                        {!media.thumbnail && (
+                          <span className="media-fallback">
+                            <Icon name="video" />
+                          </span>
+                        )}
+                        <div className="media-title">
+                          <p className="media-ready">
+                            <Icon name="check" />
+                            {t("media.ready")}
+                          </p>
+                          <h3>
+                            {media.sourceUrl ? (
+                              <a
+                                className="media-link"
+                                href={media.sourceUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={t("media.openInBrowser")}
+                              >
+                                {media.title}
+                              </a>
+                            ) : (
+                              media.title
+                            )}
+                          </h3>
+                          <p className="muted">
+                            {media.uploader ??
+                              (localMedia
+                                ? t("media.local")
+                                : t("media.partsCount", {
+                                    count: media.parts.length,
+                                  }))}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="quiet icon-button"
+                          aria-label={t("media.remove")}
+                          title={t("media.remove")}
+                          onClick={removeVideo}
+                        >
+                          <Icon name="close" />
+                        </button>
+                      </div>
+                      {media.multipart && (
+                        <fieldset className="parts">
+                          <legend>{t("media.selectParts")}</legend>
+                          <div className="parts-heading">
+                            <p className="muted" role="status">
+                              {t("media.selected", {
+                                selected: selected.size,
+                                total: media.parts.length,
+                              })}
+                            </p>
+                            <button
+                              type="button"
+                              className="quiet"
+                              onClick={() =>
+                                setSelectedParts(
+                                  selected.size === media.parts.length
+                                    ? []
+                                    : media.parts.map((part) => part.id),
+                                )
+                              }
+                            >
+                              {t(
+                                selected.size === media.parts.length
+                                  ? "media.deselectAll"
+                                  : "media.selectAll",
+                              )}
+                            </button>
+                          </div>
+                          <div className="parts-list">
+                            {media.parts.map((part) => (
+                              <label className="checkbox" key={part.id}>
+                                <input
+                                  type="checkbox"
+                                  checked={selected.has(part.id)}
+                                  onChange={(event) => {
+                                    const checked = event.target.checked;
+                                    setSelectedParts((current) =>
+                                      checked
+                                        ? [...current, part.id]
+                                        : current.filter(
+                                            (id) => id !== part.id,
+                                          ),
+                                    );
+                                  }}
+                                />
+                                {partLabel(part, t)}
+                              </label>
+                            ))}
+                          </div>
+                        </fieldset>
+                      )}
+                    </div>
                   )}
-                  <span className="instruction-optional">
-                    {t("output.optional")}
-                  </span>
                 </div>
-                <div className="preset-controls">
-                  <label htmlFor="instruction-preset" className="sr-only">
-                    {t("output.presets")}
-                  </label>
-                  <select
-                    name="instruction-preset"
-                    id="instruction-preset"
-                    value={presetId}
-                    disabled={presets.length === 0}
-                    onChange={(event) => {
-                      setPresetId(event.target.value);
-                      setInstructionsError(undefined);
-                    }}
-                  >
-                    <option value="">{t("output.choosePreset")}</option>
-                    {presets.map((entry) => (
-                      <option key={entry.id} value={entry.id}>
-                        {entry.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="save-preset"
-                    disabled={!canSavePreset}
-                    onClick={savePreset}
-                  >
-                    <Icon name="save" />
-                    {t("output.savePreset")}
-                  </button>
-                </div>
-                {prompt ? (
-                  <div className="prompt-file">
-                    <Icon name="document" />
-                    <span title={prompt.name}>{prompt.name}</span>
-                    <button
-                      type="button"
-                      className="quiet icon-button"
-                      aria-label={t("common.removeFile", { name: prompt.name })}
-                      onClick={removePrompt}
-                    >
-                      <Icon name="close" />
-                    </button>
+              </section>
+              <section
+                className="output-section"
+                aria-labelledby="output-heading"
+              >
+                <h2 id="output-heading" className="section-heading">
+                  <Icon name="document" />
+                  {t("output.settings")}
+                </h2>
+                <div className="output-fields">
+                  <div className="instructions-field">
+                    <div className="field-label-row">
+                      {prompt ? (
+                        <span className="option-label">
+                          {t("output.instructions")}
+                        </span>
+                      ) : (
+                        <label htmlFor="custom-instructions">
+                          {t("output.instructions")}
+                        </label>
+                      )}
+                      <span className="instruction-optional">
+                        {t("output.optional")}
+                      </span>
+                    </div>
+                    <div className="preset-controls">
+                      <label htmlFor="instruction-preset" className="sr-only">
+                        {t("output.presets")}
+                      </label>
+                      <select
+                        name="instruction-preset"
+                        id="instruction-preset"
+                        value={presetId}
+                        disabled={presets.length === 0}
+                        onChange={(event) => {
+                          setPresetId(event.target.value);
+                          setInstructionsError(undefined);
+                        }}
+                      >
+                        <option value="">{t("output.choosePreset")}</option>
+                        {presets.map((entry) => (
+                          <option key={entry.id} value={entry.id}>
+                            {entry.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="save-preset"
+                        disabled={!canSavePreset}
+                        onClick={savePreset}
+                      >
+                        <Icon name="save" />
+                        {t("output.savePreset")}
+                      </button>
+                    </div>
+                    {prompt ? (
+                      <div className="prompt-file">
+                        <Icon name="document" />
+                        <span title={prompt.name}>{prompt.name}</span>
+                        <button
+                          type="button"
+                          className="quiet icon-button"
+                          aria-label={t("common.removeFile", {
+                            name: prompt.name,
+                          })}
+                          onClick={removePrompt}
+                        >
+                          <Icon name="close" />
+                        </button>
+                      </div>
+                    ) : (
+                      <textarea
+                        id="custom-instructions"
+                        rows={4}
+                        value={instructions}
+                        placeholder={t("output.placeholder")}
+                        onChange={(event) =>
+                          changeInstructions(event.target.value)
+                        }
+                      />
+                    )}
+                    <div className="prompt-import">
+                      <button
+                        type="button"
+                        className="quiet import-prompt"
+                        onClick={choosePrompt}
+                        disabled={!desktop}
+                      >
+                        <Icon name="upload" />
+                        {t(prompt ? "output.replace" : "output.import")}
+                      </button>
+                    </div>
+                    {instructionsError && (
+                      <p className="error field-error" role="alert">
+                        {renderMessage(t, instructionsError)}
+                      </p>
+                    )}
                   </div>
-                ) : (
-                  <textarea
-                    id="custom-instructions"
-                    rows={4}
-                    value={instructions}
-                    placeholder={t("output.placeholder")}
-                    onChange={(event) => changeInstructions(event.target.value)}
-                  />
-                )}
-                <div className="prompt-import">
-                  <button
-                    type="button"
-                    className="quiet import-prompt"
-                    onClick={choosePrompt}
-                    disabled={!desktop}
-                  >
-                    <Icon name="upload" />
-                    {t(prompt ? "output.replace" : "output.import")}
-                  </button>
+                  <div className="options">
+                    <div className="option">
+                      <span className="option-label">
+                        {t("output.location")}
+                      </span>
+                      <button
+                        type="button"
+                        className="directory-choice"
+                        aria-label={
+                          folder
+                            ? t("output.changeLocation", { folder })
+                            : t("output.chooseLocation")
+                        }
+                        title={folder || undefined}
+                        onClick={chooseFolder}
+                        disabled={!desktop}
+                      >
+                        <Icon name="folder" />
+                        <span>
+                          {folder ||
+                            (folderStatus === "checking"
+                              ? t("output.preparingFolder")
+                              : t("output.chooseFolder"))}
+                        </span>
+                        <Icon name="down" />
+                      </button>
+                      {folderError && (
+                        <p className="error field-error" role="alert">
+                          {renderMessage(t, folderError)}
+                        </p>
+                      )}
+                    </div>
+                    <div className="option">
+                      <label htmlFor="output-format">
+                        {t("output.format")}
+                      </label>
+                      <select
+                        name="output-format"
+                        id="output-format"
+                        value={format}
+                        onChange={(event) =>
+                          setFormat(event.target.value === "txt" ? "txt" : "md")
+                        }
+                      >
+                        <option value="md">{t("common.markdown")}</option>
+                        <option value="txt">{t("common.plainText")}</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
-                {instructionsError && (
-                  <p className="error field-error" role="alert">
-                    {renderMessage(t, instructionsError)}
-                  </p>
-                )}
-              </div>
-            </section>
-          </section>
-          <div className="side-rail">
+              </section>
+            </div>
             <section className="action-panel" aria-label={t("output.generate")}>
               {formError && (
                 <p className="error" role="alert">
@@ -932,8 +947,8 @@ export default function App({
                 <Icon name="arrow" />
               </button>
             </section>
-            <TaskList queue={queue} onRestore={restoreTask} />
-          </div>
+          </section>
+          <TaskList queue={queue} onRestore={restoreTask} />
         </div>
       </main>
       <dialog

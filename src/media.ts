@@ -14,6 +14,7 @@ export type MediaInfo = {
   title: string;
   uploader?: string;
   thumbnail?: string;
+  sourceUrl?: string;
   parts: MediaPart[];
   multipart: boolean;
   preferredPartId?: string;
@@ -202,7 +203,10 @@ export async function inspectMedia(source: VideoSource): Promise<MediaInfo> {
     return ordinaryVideo({ id: "local", title }, source);
   }
 
-  if (source.kind === "bilibili") return inspectBilibili(source.url);
+  if (source.kind === "bilibili") {
+    const info = await inspectBilibili(source.url);
+    return { ...info, sourceUrl: source.url };
+  }
 
   const info = await invoke<VideoProbe>("probe_remote_video", {
     url: source.url,
@@ -217,7 +221,7 @@ export async function inspectMedia(source: VideoSource): Promise<MediaInfo> {
     throw message("error.publishedYoutubeRequired");
   }
 
-  return ordinaryVideo(info, source);
+  return { ...ordinaryVideo(info, source), sourceUrl: source.url };
 }
 
 export function prepareAudio(part: MediaPart): Promise<AudioChunks> {

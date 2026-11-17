@@ -1,9 +1,11 @@
 import { useRef, useState, useSyncExternalStore } from "react";
+import { StackSimpleIcon } from "@phosphor-icons/react/dist/csr/StackSimple";
 import { useTranslation } from "react-i18next";
 import { Icon } from "./Icon";
 import { errorMessage, renderMessage, type Message } from "./i18n";
 import { partLabel } from "./media";
 import { revealOutput, type Task, type TaskQueue } from "./tasks";
+import "./TaskList.css";
 
 const phases = ["audio", "transcription", "organization", "output"] as const;
 
@@ -53,7 +55,7 @@ function TaskCard({
         <h3 ref={title} tabIndex={-1}>
           {task.title}
         </h3>
-        <span className="status" data-status={task.status} role="status">
+        <span className="task-status" data-status={task.status} role="status">
           <span className="sr-only">
             {t("task.statusLabel", { title: task.title, status })}
           </span>
@@ -106,7 +108,7 @@ function TaskCard({
             {task.parts.map((part) => (
               <li className="task-part" key={part.id}>
                 <span className="task-part-name">{partLabel(part, t)}</span>
-                <span className="status" data-status={part.status}>
+                <span className="task-status" data-status={part.status}>
                   {t(
                     part.status === "running" && part.phase
                       ? `task.phase.${part.phase}`
@@ -129,12 +131,8 @@ function TaskCard({
           </p>
         )
       )}
-      {path && (
-        <p className="output-path" title={path}>
-          {path}
-        </p>
-      )}
-      <div className="actions task-actions">
+      {path && <p className="task-output-path">{path}</p>}
+      <div className="task-actions">
         {path && (
           <button
             type="button"
@@ -188,20 +186,34 @@ export function TaskList({
   return (
     <section className="queue-panel" aria-labelledby="queue-heading">
       <header className="queue-header">
-        <h2 id="queue-heading">{t("task.heading")}</h2>
+        <div className="queue-heading">
+          <span className="queue-heading-icon" aria-hidden="true">
+            <StackSimpleIcon className="icon" />
+          </span>
+          <h2 id="queue-heading">{t("task.heading")}</h2>
+        </div>
         {tasks.length > 0 && (
-          <p className="muted">{t("task.count", { count: tasks.length })}</p>
+          <p className="queue-count">
+            {t("task.count", { count: tasks.length })}
+          </p>
         )}
       </header>
       {tasks.length === 0 ? (
         <div className="queue-empty">
-          <span className="queue-empty-icon" aria-hidden="true">
-            <Icon name="document" />
-          </span>
+          <div className="queue-empty-art" aria-hidden="true">
+            <span className="queue-empty-page">
+              <Icon name="document" />
+            </span>
+          </div>
           <h3>{t("task.empty")}</h3>
         </div>
       ) : (
-        <ul className="tasks">
+        <ul
+          className="tasks"
+          role="list"
+          tabIndex={0}
+          aria-label={t("task.list")}
+        >
           {tasks
             .slice()
             .reverse()

@@ -36,6 +36,7 @@ export default {
   "media.local": "ローカル動画",
   "media.partsCount": "{{count}} パート",
   "media.remove": "動画を取り除く",
+  "media.openInBrowser": "ブラウザーで開く",
   "media.selectParts": "パートを選択",
   "media.selected": "{{selected}} / {{total}} 件を選択済み",
   "media.selectAll": "すべて選択",
@@ -64,6 +65,21 @@ export default {
   "output.queueing": "準備中…",
   "output.fallbackTitle": "動画",
   "output.suffix": "原稿",
+  "preset.empty": "保存済みのプリセットはありません。",
+  "preset.create": "プリセットを新規作成",
+  "preset.edit": "編集",
+  "preset.editNamed": "プリセット「{{name}}」を編集",
+  "preset.editTitle": "プリセットを編集",
+  "preset.delete": "削除",
+  "preset.deleteNamed": "プリセット「{{name}}」を削除",
+  "preset.deleteTitle": "プリセットを削除しますか？",
+  "preset.deleteDescription": "「{{name}}」をプリセットから削除しますか？",
+  "preset.close": "整理指示のプリセットを閉じる",
+  "preset.name": "プリセット名",
+  "preset.nameRequired": "プリセット名を入力してください。",
+  "preset.nameTaken": "この名前は使用済みです。別の名前を入力してください。",
+  "preset.contentRequired": "原稿の整理指示を入力してください。",
+  "preset.save": "プリセットを保存",
   "restore.title": "タスクの設定を復元しますか？",
   "restore.description": "現在の作業内容は、このタスクの設定で上書きされます。",
   "restore.confirm": "復元する",
@@ -251,6 +267,8 @@ export default {
   "error.modelSetting": "{{purpose}}：{{cause}}",
   "error.saveInstructionPreset":
     "整理指示のプリセットをこの端末に保存できませんでした。",
+  "error.deleteInstructionPreset":
+    "整理指示のプリセットを削除できませんでした。",
   "error.loadModelSettings":
     "システムの資格情報ストアからモデル設定を読み込めませんでした。",
   "error.saveModelSettings":

@@ -3,7 +3,16 @@ export type VideoSource =
   | { kind: "local"; path: string };
 
 export function parseVideoLink(input: string): VideoSource | null {
-  const url = URL.parse(input.trim());
+  const value = input.trim();
+  const source = parseHttpsVideoLink(value);
+  if (source) return source;
+
+  const start = value.indexOf("https://");
+  return start > 0 ? parseHttpsVideoLink(value.slice(start)) : null;
+}
+
+function parseHttpsVideoLink(value: string): VideoSource | null {
+  const url = URL.parse(value);
 
   if (!url || url.protocol !== "https:" || url.username || url.password) {
     return null;

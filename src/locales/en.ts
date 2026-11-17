@@ -36,6 +36,7 @@ export default {
   "media.local": "Local video",
   "media.partsCount": "Video parts: {{count}}",
   "media.remove": "Remove video",
+  "media.openInBrowser": "Open in browser",
   "media.selectParts": "Select parts",
   "media.selected": "Selected {{selected}} of {{total}}",
   "media.selectAll": "Select all",
@@ -64,6 +65,21 @@ export default {
   "output.queueing": "Preparing…",
   "output.fallbackTitle": "Video",
   "output.suffix": "Document",
+  "preset.empty": "No presets saved yet.",
+  "preset.create": "New preset",
+  "preset.edit": "Edit",
+  "preset.editNamed": "Edit preset {{name}}",
+  "preset.editTitle": "Edit preset",
+  "preset.delete": "Delete",
+  "preset.deleteNamed": "Delete preset {{name}}",
+  "preset.deleteTitle": "Delete preset?",
+  "preset.deleteDescription": "Delete “{{name}}” from your presets?",
+  "preset.close": "Close instruction presets",
+  "preset.name": "Preset name",
+  "preset.nameRequired": "Enter a preset name.",
+  "preset.nameTaken": "This name is already in use. Choose a different name.",
+  "preset.contentRequired": "Enter organization instructions.",
+  "preset.save": "Save preset",
   "restore.title": "Restore task settings?",
   "restore.description":
     "This task’s settings will replace the contents of your workspace.",
@@ -247,6 +263,7 @@ export default {
   "error.modelSetting": "{{purpose}}: {{cause}}",
   "error.saveInstructionPreset":
     "Could not save the instruction preset on this device.",
+  "error.deleteInstructionPreset": "Could not delete the instruction preset.",
   "error.loadModelSettings":
     "Could not load model settings from the system credential store.",
   "error.saveModelSettings":
