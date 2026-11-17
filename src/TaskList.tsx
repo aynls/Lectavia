@@ -204,7 +204,7 @@ function TaskCard({
             if (queue.retry(task.id)) focusTitle();
           }}
         >
-          {t("task.retry")}
+          {t(multipart ? "task.retry" : "task.retryStep")}
         </button>
       )}
       <button type="button" onClick={() => onRestore(task.id)}>
@@ -274,7 +274,11 @@ function TaskCard({
               const partTitleId = `task-part-${task.id}-${index}`;
               return (
                 <li className="task-part" key={part.id}>
-                  <span className="task-part-name" id={partTitleId}>
+                  <span
+                    className="task-part-name"
+                    id={partTitleId}
+                    tabIndex={-1}
+                  >
                     {partLabel(part, t)}
                   </span>
                   <span className="task-status" data-status={part.status}>
@@ -289,11 +293,29 @@ function TaskCard({
                       {describeFailure(part.error, part.phase)}
                     </p>
                   )}
-                  {part.outputPath && (
+                  {(part.outputPath || part.status === "failed") && (
                     <TaskOutput
                       path={part.outputPath}
                       describedBy={partTitleId}
-                    />
+                    >
+                      {part.status === "failed" && (
+                        <button
+                          type="button"
+                          aria-describedby={partTitleId}
+                          disabled={recovering}
+                          onClick={() => {
+                            setRecoveryError(undefined);
+                            if (queue.retryPart(task.id, part.id)) {
+                              document
+                                .getElementById(partTitleId)
+                                ?.focus({ preventScroll: true });
+                            }
+                          }}
+                        >
+                          {t("task.retryStep")}
+                        </button>
+                      )}
+                    </TaskOutput>
                   )}
                 </li>
               );

@@ -114,6 +114,7 @@
   "task.openFolder": "打开输出目录",
   "task.reveal": "定位文稿",
   "task.retry": "重试失败项",
+  "task.retryStep": "重试",
   "task.updateModels": "修改模型后重试…",
   "task.changeFolder": "更换目录后重试…",
   "task.restore": "恢复任务参数",

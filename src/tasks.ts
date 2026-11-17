@@ -12,6 +12,7 @@ import {
   partLabel,
   prepareAudio,
   removeAudio,
+  type AudioChunks,
   type MediaInfo,
   type MediaPart,
 } from "./media";
@@ -73,6 +74,7 @@ export interface Task {
 
 interface QueuedPart {
   media: MediaPart;
+  audio?: AudioChunks;
   transcript?: string;
   material?: string;
 }
@@ -118,6 +120,16 @@ const directoryErrors = new Set<MessageKey>([
   "error.outputSave",
 ]);
 
+const unusableAudioErrors = new Set<MessageKey>([
+  "error.cacheAccess",
+  "error.audioChunkMissing",
+  "error.audioChunkRestricted",
+  "error.audioChunkOpen",
+  "error.audioChunkMetadata",
+  "error.audioChunkEmpty",
+  "error.audioChunkTooLarge",
+]);
+
 function hasErrorKey(error: Message, keys: ReadonlySet<MessageKey>): boolean {
   return (
     keys.has(error.key) ||
@@ -144,6 +156,12 @@ function failureMessage(error: unknown, job: Job): Message {
     job.request.asr.apiKey,
     job.request.llm.apiKey,
   ]);
+}
+
+async function releaseAudio(part: QueuedPart): Promise<void> {
+  const audio = part.audio;
+  part.audio = undefined;
+  if (audio) await removeAudio(audio).catch(() => undefined);
 }
 
 function taskStatus(parts: readonly TaskPart[], completed: number): TaskStatus {
@@ -242,7 +260,10 @@ export class TaskQueue {
       instructions: instructions || undefined,
     };
     this.#jobs.set(task.id, job);
-    this.schedule(job);
+    this.schedule(
+      job,
+      parts.map((_, index) => index),
+    );
   }
 
   retry(taskId: string, updates: TaskRetryUpdates = {}): boolean {
@@ -259,7 +280,6 @@ export class TaskQueue {
     if (updates.outputDirectory !== undefined) {
       job.multipartDirectory = undefined;
     }
-    job.preparingDirectory = undefined;
     // Finished stages remain reusable. Only stages that run again use the new connections.
     job.request = {
       ...job.request,
@@ -267,23 +287,41 @@ export class TaskQueue {
       llm: updates.llm ? { ...updates.llm } : job.request.llm,
       outputDirectory: updates.outputDirectory ?? job.request.outputDirectory,
     };
+    return this.requeueFailedParts(job);
+  }
+
+  retryPart(taskId: string, partId: string): boolean {
+    const job = this.#jobs.get(taskId);
+    return job ? this.requeueFailedParts(job, partId) : false;
+  }
+
+  private requeueFailedParts(job: Job, partId?: string): boolean {
+    const indices: number[] = [];
+    const parts = job.task.parts.map((part, index): TaskPart => {
+      if (
+        part.status !== "failed" ||
+        (partId !== undefined && part.id !== partId)
+      ) {
+        return part;
+      }
+      indices.push(index);
+      return { ...part, status: "queued", phase: undefined, error: undefined };
+    });
+    if (indices.length === 0) return false;
+
     job.task = {
       ...job.task,
-      status: "queued",
+      status: taskStatus(parts, job.task.outputs.length),
+      parts,
       recovery: [],
-      parts: job.task.parts.map((part) =>
-        part.status === "failed"
-          ? { ...part, status: "queued", phase: undefined, error: undefined }
-          : part,
-      ),
     };
-    this.schedule(job);
+    this.schedule(job, indices);
     return true;
   }
 
-  private schedule(job: Job): void {
-    for (const [index, part] of job.task.parts.entries()) {
-      if (part.status === "queued") this.#pending.push({ job, index });
+  private schedule(job: Job, indices: number[]): void {
+    for (const index of indices) {
+      this.#pending.push({ job, index });
     }
     this.publish();
     this.drain();
@@ -360,10 +398,14 @@ export class TaskQueue {
         title: job.task.title,
         fallbackTitle: translator(job.request.locale)("output.fallbackTitle"),
       },
-    ).then((directory) => {
-      job.multipartDirectory = directory;
-      return directory;
-    }));
+    )
+      .then((directory) => {
+        job.multipartDirectory = directory;
+        return directory;
+      })
+      .finally(() => {
+        job.preparingDirectory = undefined;
+      }));
   }
 
   private async runPart(job: Job, index: number): Promise<void> {
@@ -375,9 +417,7 @@ export class TaskQueue {
       (part.media.number
         ? t("media.part", { number: part.media.number })
         : job.task.title);
-    let phase: Phase = "output";
-    const setPhase = (next: Phase) => {
-      phase = next;
+    const setPhase = (phase: Phase) => {
       this.updatePart(job, index, { status: "running", phase });
     };
 
@@ -389,16 +429,14 @@ export class TaskQueue {
       }
       if (part.material === undefined) {
         if (part.transcript === undefined) {
-          setPhase("audio");
-          const audio = await prepareAudio(part.media);
-
-          try {
-            setPhase("transcription");
-            part.transcript = await transcribeAudio(audio.files, asr);
-          } finally {
-            // Cleanup errors never replace the result of transcription.
-            await removeAudio(audio).catch(() => undefined);
+          if (part.audio === undefined) {
+            setPhase("audio");
+            part.audio = await prepareAudio(part.media);
           }
+
+          setPhase("transcription");
+          part.transcript = await transcribeAudio(part.audio.files, asr);
+          await releaseAudio(part);
         }
 
         setPhase("organization");
@@ -435,10 +473,18 @@ export class TaskQueue {
         outputDirectory: directory,
       });
     } catch (error) {
+      const phase = job.task.parts[index].phase ?? "output";
+      const failure = failureMessage(error, job);
+      if (
+        phase === "transcription" &&
+        hasErrorKey(failure, unusableAudioErrors)
+      ) {
+        await releaseAudio(part);
+      }
       this.updatePart(job, index, {
         status: "failed",
         phase,
-        error: failureMessage(error, job),
+        error: failure,
       });
     }
   }

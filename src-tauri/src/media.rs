@@ -19,6 +19,8 @@ use tempfile::TempDir;
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
+#[cfg(feature = "desktop")]
+use std::{collections::HashMap, sync::Mutex};
 
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
@@ -33,6 +35,17 @@ pub enum MediaSource {
 pub struct AudioChunks {
     directory: PathBuf,
     files: Vec<PathBuf>,
+}
+
+#[cfg(feature = "desktop")]
+#[derive(Default)]
+pub struct AudioCache(Mutex<HashMap<PathBuf, TempDir>>);
+
+#[cfg(feature = "desktop")]
+impl AudioCache {
+    pub fn clear(&self) {
+        self.0.lock().unwrap().clear();
+    }
 }
 
 pub struct PreparedAudio {
@@ -518,8 +531,14 @@ pub async fn prepare_media_audio(
     let cache = app_cache_dir(&app)?;
     tokio::task::spawn_blocking(move || {
         let audio = prepare_audio(&tools, &cache, source)?;
+        let directory = audio.scratch.path().to_owned();
+        app.state::<AudioCache>()
+            .0
+            .lock()
+            .unwrap()
+            .insert(directory.clone(), audio.scratch);
         Ok(AudioChunks {
-            directory: audio.scratch.keep(),
+            directory,
             files: audio.files,
         })
     })
@@ -540,7 +559,16 @@ pub async fn remove_media_audio(app: AppHandle, directory: PathBuf) -> Result<()
         return Err("error.audioCleanupRestricted".into());
     }
 
-    tauri::async_runtime::spawn_blocking(move || match fs::remove_dir_all(directory) {
+    let scratch = app
+        .state::<AudioCache>()
+        .0
+        .lock()
+        .unwrap()
+        .remove(&directory);
+    let Some(scratch) = scratch else {
+        return Ok(());
+    };
+    tauri::async_runtime::spawn_blocking(move || match scratch.close() {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(AppError::detail("error.audioCleanup", error)),

@@ -114,6 +114,7 @@
   "task.openFolder": "出力フォルダーを開く",
   "task.reveal": "原稿の場所を開く",
   "task.retry": "失敗した項目を再試行",
+  "task.retryStep": "再試行",
   "task.updateModels": "モデルを変更して再試行…",
   "task.changeFolder": "保存先を変更して再試行…",
   "task.restore": "タスクの設定を復元",

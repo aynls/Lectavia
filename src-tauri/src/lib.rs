@@ -13,7 +13,10 @@ pub use cli::run as run_cli;
 
 #[cfg(feature = "desktop")]
 pub fn run() {
+    use tauri::Manager;
+
     tauri::Builder::default()
+        .manage(media::AudioCache::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -34,6 +37,11 @@ pub fn run() {
             settings::load_model_settings,
             settings::save_model_settings,
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to launch Lectavia");
+        .build(tauri::generate_context!())
+        .expect("failed to launch Lectavia")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<media::AudioCache>().clear();
+            }
+        });
 }

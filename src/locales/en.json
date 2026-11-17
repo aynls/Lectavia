@@ -114,6 +114,7 @@
   "task.openFolder": "Open output folder",
   "task.reveal": "Show in folder",
   "task.retry": "Retry failed items",
+  "task.retryStep": "Retry",
   "task.updateModels": "Update models and retry…",
   "task.changeFolder": "Change folder and retry…",
   "task.restore": "Restore task settings",
