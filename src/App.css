@@ -1,18 +1,50 @@
 :root {
   font-family: Geist, "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
-  color: #18263b;
-  background: #f4f6fa;
+  color-scheme: light dark;
+  accent-color: var(--accent);
+  color: var(--ink);
+  background: var(--canvas);
   line-height: 1.55;
-  --surface: #fff;
-  --surface-subtle: #f7f9fc;
-  --line: #e0e6ef;
-  --control-line: #c3cddd;
-  --muted: #52627a;
-  --accent: #2d50b0;
-  --accent-hover: #244291;
-  --accent-soft: #eaf0ff;
-  --danger: #a12638;
-  --ease-out: cubic-bezier(0.2, 0.75, 0.25, 1);
+  --canvas: #efefec;
+  --surface: #fbfbf9;
+  --surface-subtle: #f5f5f1;
+  --rail: #e6e7e2;
+  --ink: #222320;
+  --muted: #565951;
+  --line: #cfd1c9;
+  --control-line: #8a8c81;
+  --accent: #a63822;
+  --accent-hover: #842c19;
+  --accent-soft: #f6e4da;
+  --accent-ink: #fffaf6;
+  --danger: #9b2838;
+  --danger-soft: #f7e1e3;
+  --scrim: rgb(28 29 24 / 46%);
+  --shadow: rgb(28 29 24 / 22%);
+  --radius: 0.5rem;
+  --radius-inner: 0.375rem;
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #191a18;
+    --surface: #252621;
+    --surface-subtle: #1e201c;
+    --rail: #20211e;
+    --ink: #efefe9;
+    --muted: #b9bbaf;
+    --line: #3f423a;
+    --control-line: #828578;
+    --accent: #f59576;
+    --accent-hover: #ffb198;
+    --accent-soft: #422821;
+    --accent-ink: #27150f;
+    --danger: #ffaaaf;
+    --danger-soft: #46272b;
+    --scrim: rgb(13 14 12 / 72%);
+    --shadow: rgb(13 14 12 / 52%);
+  }
 }
 
 * {
@@ -28,12 +60,11 @@ p {
 }
 
 .app-width {
-  width: min(100% - clamp(2rem, 6vw, 6rem), 70rem);
+  width: min(100% - clamp(2rem, 8vw, 6rem), 70rem);
   margin-inline: auto;
 }
 
 .top-bar {
-  background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
 
@@ -49,14 +80,14 @@ p {
 
 .app-header {
   justify-content: space-between;
-  min-height: 4rem;
+  min-height: 3.75rem;
   padding-block: 0.5rem;
 }
 
 .brand {
   gap: 0.625rem;
-  font-size: 1.125rem;
-  font-weight: 700;
+  font-size: 1.225rem;
+  font-weight: 720;
   letter-spacing: -0.035em;
 }
 
@@ -69,35 +100,45 @@ p {
 .brand-mark {
   display: grid;
   place-items: center;
-  width: 2.125rem;
-  height: 2.125rem;
-  border-radius: 0.625rem;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-inner);
   background: var(--accent);
-  color: white;
+  color: var(--accent-ink);
+}
+
+.brand-mark .icon {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 main {
-  padding-block: clamp(1.5rem, 4vw, 2.5rem) 2rem;
+  padding-block: clamp(1.375rem, 3.5vw, 3rem);
 }
 
 .workspace-title {
-  margin-bottom: 1.375rem;
+  margin-bottom: clamp(1rem, 2.5vw, 1.75rem);
 }
 
 h1 {
-  font-size: clamp(1.625rem, 3.4vw, 2.25rem);
-  line-height: 1.25;
-  font-weight: 720;
+  font-size: clamp(2rem, 5.25vw, 3.25rem);
+  line-height: 1.16;
+  letter-spacing: -0.05em;
+  font-weight: 750;
+}
+
+h1 span {
+  color: var(--accent);
 }
 
 .workspace-title p {
-  margin-top: 0.4rem;
+  margin-top: 0.55rem;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.925rem;
 }
 
 h2 {
-  font-size: 1.02rem;
+  font-size: 1rem;
 }
 
 h3 {
@@ -108,43 +149,39 @@ h3 {
 
 .workspace {
   display: grid;
-  align-items: start;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-  gap: clamp(1rem, 2.5vw, 1.5rem);
+  grid-template-columns: minmax(0, 1fr) minmax(13.75rem, 0.56fr);
+  gap: clamp(1.25rem, 4vw, 3.5rem);
 }
 
-.panel,
-.settings-dialog {
+.composer,
+.queue-panel {
   min-width: 0;
-  background: var(--surface);
+}
+
+.source-section {
+  padding: 0.875rem 1rem 0.625rem;
   border: 1px solid var(--line);
-  border-radius: 0.875rem;
-  box-shadow: 0 2px 6px rgb(24 38 59 / 4%);
+  border-top: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
 }
 
-.composer-section,
-.composer-footer {
-  padding: 1rem clamp(1rem, 2.5vw, 1.375rem);
+.output-section {
+  margin-top: 0.875rem;
 }
 
-.composer-section + .composer-section,
-.composer-footer {
-  border-top: 1px solid var(--line);
+.source-section h2,
+.output-section h2 {
+  margin-bottom: 0.375rem;
 }
 
-.composer-section h2 {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-
-.composer-section h2 .icon {
-  color: var(--accent);
+.source-label {
+  display: block;
+  margin-bottom: 0.25rem;
 }
 
 label,
-.option-label > span {
+.option-label {
   font-size: 0.875rem;
   font-weight: 650;
 }
@@ -156,7 +193,7 @@ button {
   min-width: 0;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--control-line);
-  border-radius: 0.5rem;
+  border-radius: var(--radius-inner);
   background: var(--surface);
   color: inherit;
   font: inherit;
@@ -178,6 +215,7 @@ button {
   gap: 0.45rem;
   cursor: pointer;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 button:hover:not(:disabled) {
@@ -187,20 +225,20 @@ button:hover:not(:disabled) {
 }
 
 button:active:not(:disabled) {
-  background: #dce6ff;
+  border-color: var(--accent-hover);
 }
 
 button:disabled {
   cursor: default;
   background: var(--surface-subtle);
   color: var(--muted);
-  opacity: 0.65;
+  opacity: 0.75;
 }
 
 button.quiet {
   border-color: transparent;
   background: transparent;
-  color: var(--accent);
+  color: var(--ink);
 }
 
 button.quiet:disabled {
@@ -210,23 +248,19 @@ button.quiet:disabled {
 button.primary {
   border-color: var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
 }
 
 button.primary:hover:not(:disabled),
 button.primary:active:not(:disabled) {
   border-color: var(--accent-hover);
   background: var(--accent-hover);
-  color: #fff;
-}
-
-button.primary:active:not(:disabled) {
-  background: #1e3779;
+  color: var(--accent-ink);
 }
 
 button.primary:disabled {
   border-color: var(--line);
-  background: #e9eef7;
+  background: var(--rail);
   color: var(--muted);
   opacity: 1;
 }
@@ -278,18 +312,31 @@ button.primary:disabled {
 
 .link-row button {
   flex: 0 0 auto;
+  min-inline-size: 4.5rem;
 }
 
 .local-video {
-  margin-top: 0.375rem;
-  margin-inline-start: -0.5rem;
+  min-height: 2.25rem;
+  margin-top: 0.25rem;
+  margin-inline-start: -0.375rem;
+  padding-inline: 0.375rem;
+}
+
+.local-video .icon,
+.directory-choice .icon {
+  color: var(--accent);
+}
+
+.local-video:disabled .icon,
+.directory-choice:disabled .icon {
+  color: inherit;
 }
 
 .media {
   margin-top: 0.625rem;
   padding: 0.75rem;
   border: 1px solid var(--line);
-  border-radius: 0.625rem;
+  border-radius: var(--radius-inner);
   background: var(--surface-subtle);
 }
 
@@ -303,7 +350,7 @@ button.primary:disabled {
   width: 5.5rem;
   aspect-ratio: 16 / 9;
   object-fit: cover;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-inner);
   background: var(--line);
 }
 
@@ -312,6 +359,19 @@ button.primary:disabled {
   place-items: center;
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+.media-loading .media-fallback,
+.skeleton-line {
+  background: var(--line);
+}
+
+.skeleton-line {
+  display: block;
+  width: min(6rem, 80%);
+  height: 0.375rem;
+  margin-top: 0.5rem;
+  border-radius: var(--radius-inner);
 }
 
 .media-title {
@@ -365,7 +425,7 @@ legend {
   max-height: 11rem;
   overflow-y: auto;
   padding: 0.25rem;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-inner);
   background: var(--surface);
 }
 
@@ -375,7 +435,7 @@ legend {
   gap: 0.625rem;
   min-height: 2.5rem;
   padding-inline: 0.5rem;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-inner);
   cursor: pointer;
   font-weight: 500;
   overflow-wrap: anywhere;
@@ -397,36 +457,28 @@ legend {
 
 .options {
   display: grid;
-  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) minmax(8.5rem, 0.6fr);
+  gap: 0.75rem;
 }
 
 .option {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.option-label {
+  gap: 0.25rem;
   min-width: 0;
 }
 
-.file-path,
-.output-path {
-  color: var(--muted);
-  font-size: 0.8rem;
-  overflow-wrap: anywhere;
+button.directory-choice {
+  justify-content: flex-start;
 }
 
-.option .file-path {
+button.directory-choice span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .advanced {
-  margin-top: 0.625rem;
-  border-top: 1px solid var(--line);
+  margin: 0.375rem 0;
 }
 
 :is(.advanced, .task-details, .settings-advanced) summary {
@@ -436,11 +488,15 @@ legend {
   min-height: 2.625rem;
   width: fit-content;
   max-width: 100%;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-inner);
   color: var(--muted);
   cursor: pointer;
   font-size: 0.875rem;
   font-weight: 550;
+}
+
+.advanced > summary {
+  min-height: 2.375rem;
 }
 
 :is(.advanced, .task-details, .settings-advanced)
@@ -478,18 +534,32 @@ legend {
 }
 
 .composer-footer {
-  border-radius: 0 0 0.875rem 0.875rem;
-  background: var(--surface-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--line);
 }
 
 .generate {
-  width: 100%;
   min-height: 2.75rem;
+  padding-inline: 1rem;
+  gap: 0.875rem;
 }
 
-.next-step:not(:empty),
+.next-step {
+  flex: 1 1 10rem;
+}
+
+.next-step:empty {
+  position: absolute;
+}
+
 .composer-footer .error {
-  margin: 0 0 0.5rem;
+  flex-basis: 100%;
+  margin: 0;
 }
 
 .muted,
@@ -501,14 +571,9 @@ legend {
 .notice {
   padding: 0.625rem 0.875rem;
   margin-bottom: 1rem;
-  border: 1px solid #d5e1f9;
-  border-radius: 0.5rem;
-  background: var(--accent-soft);
-}
-
-.source-status,
-.error {
-  margin-top: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-inner);
+  background: var(--surface);
 }
 
 .error {
@@ -517,13 +582,25 @@ legend {
   overflow-wrap: anywhere;
 }
 
+.source-section > .error {
+  margin-top: 0.375rem;
+}
+
+.queue-panel {
+  align-self: start;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--rail);
+  --queue-inset: clamp(0.875rem, 2.5vw, 1.375rem);
+}
+
 .queue-header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   flex-wrap: wrap;
   column-gap: 0.75rem;
-  padding: 1rem clamp(1rem, 2.5vw, 1.375rem);
+  padding: 0.875rem var(--queue-inset);
   border-bottom: 1px solid var(--line);
 }
 
@@ -535,39 +612,52 @@ legend {
 }
 
 .queue-empty {
-  display: grid;
-  justify-items: center;
-  gap: 0.375rem;
-  padding: 2rem 1rem;
-  text-align: center;
-  font-size: 0.95rem;
-  font-weight: 650;
+  padding: 1rem var(--queue-inset) 1.25rem;
 }
 
-.queue-empty .muted {
-  font-weight: 400;
+.queue-workflow {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+  font-weight: 550;
 }
 
-.queue-mark {
+.queue-workflow li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.queue-workflow li:not(:last-child)::after {
+  position: absolute;
+  inset-inline-start: calc(1rem - 0.5px);
+  top: 100%;
+  width: 1px;
+  height: 0.5rem;
+  background: var(--control-line);
+  content: "";
+}
+
+.phase-icon {
   display: grid;
+  flex: 0 0 auto;
   place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  margin-bottom: 0.25rem;
-  border-radius: 0.75rem;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-.queue-mark .icon {
-  width: 1.4rem;
-  height: 1.4rem;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-inner);
+  background: var(--surface-subtle);
+  color: var(--muted);
 }
 
 .task {
   display: grid;
   gap: 0.625rem;
-  padding: 1rem clamp(1rem, 2.5vw, 1.375rem);
+  padding: 0.875rem var(--queue-inset);
 }
 
 .task + .task {
@@ -598,7 +688,7 @@ legend {
 }
 
 .phase-track [data-stage="done"] {
-  background: #9eb4e7;
+  background: var(--control-line);
 }
 
 .phase-track [data-stage="current"] {
@@ -613,7 +703,7 @@ legend {
   display: grid;
   gap: 0.625rem;
   padding: 0.625rem;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-inner);
   background: var(--surface-subtle);
 }
 
@@ -632,8 +722,8 @@ legend {
 .status {
   flex: 0 0 auto;
   padding: 0.16rem 0.44rem;
-  border-radius: 0.35rem;
-  background: #eef2f7;
+  border-radius: var(--radius-inner);
+  background: var(--surface-subtle);
   color: var(--muted);
   font-size: 0.75rem;
   font-weight: 650;
@@ -645,13 +735,18 @@ legend {
 }
 
 .status[data-status="completed"] {
-  background: #e6f2eb;
-  color: #245741;
+  color: var(--ink);
 }
 
 .status:is([data-status="failed"], [data-status="partial"]) {
-  background: #f9e9e9;
-  color: #8e2c38;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.output-path {
+  color: var(--muted);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
 }
 
 .task-error {
@@ -677,8 +772,11 @@ legend {
   max-height: calc(100% - 2rem);
   padding: 0;
   overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
   color: inherit;
-  box-shadow: 0 24px 64px rgb(24 38 59 / 18%);
+  box-shadow: 0 24px 64px var(--shadow);
 }
 
 .settings-form {
@@ -689,7 +787,11 @@ legend {
 }
 
 .settings-dialog::backdrop {
-  background-color: #18263b66;
+  background-color: var(--scrim);
+}
+
+.settings-trigger {
+  min-height: 2.25rem;
 }
 
 .settings-trigger .icon {
@@ -727,7 +829,7 @@ legend {
 .settings-fields {
   padding: 0.625rem 0.875rem;
   border: 1px solid var(--line);
-  border-radius: 0.625rem;
+  border-radius: var(--radius-inner);
   background: var(--surface-subtle);
 }
 
@@ -790,6 +892,7 @@ legend {
   gap: 0.625rem;
   padding: 0.875rem 1.25rem;
   border-top: 1px solid var(--line);
+  background: var(--surface-subtle);
 }
 
 .settings-footer .error {
@@ -797,6 +900,26 @@ legend {
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  button {
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease,
+      translate 130ms var(--ease-out);
+  }
+
+  button:active:not(:disabled) {
+    translate: 0 1px;
+  }
+
+  .generate .icon {
+    transition: translate 160ms var(--ease-out);
+  }
+
+  .generate:hover:not(:disabled) .icon {
+    translate: 0.175rem;
+  }
+
   .enter,
   .task-details[open] .task-parts,
   :is(.advanced, .settings-advanced)[open] .advanced-content {
@@ -839,7 +962,7 @@ legend {
   }
 
   .settings-dialog[open]::backdrop {
-    background-color: #18263b66;
+    background-color: var(--scrim);
   }
 
   @starting-style {
@@ -862,6 +985,19 @@ legend {
 
 @media (max-width: 37rem) {
   .settings-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 25rem) {
+  .next-step,
+  .generate {
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 22rem) {
+  .options {
     grid-template-columns: 1fr;
   }
 }

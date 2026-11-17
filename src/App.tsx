@@ -42,7 +42,7 @@ export default function App() {
     : previewing
       ? ""
       : !media
-        ? "添加视频后即可开始。"
+        ? "先选择要转写的视频。"
         : selected.size === 0
           ? "请至少选择一个分 P。"
           : !folder
@@ -178,7 +178,7 @@ export default function App() {
         <div className="app-width app-header">
           <div className="brand">
             <span className="brand-mark">
-              <Icon name="book" />
+              <Icon name="waveform" />
             </span>
             Lectavia
           </div>
@@ -193,25 +193,21 @@ export default function App() {
         </div>
       </header>
       <main className="app-width">
-        <div className="workspace-title">
-          <h1>视频转文稿</h1>
-          <p>将视频中的语音转写、整理为 Markdown 或纯文本。</p>
-        </div>
         {!desktop && (
           <p className="notice">请在 Lectavia 桌面应用中处理视频。</p>
         )}
         <div className="workspace">
-          <section className="panel composer" aria-label="生成文稿">
-            <section
-              className="composer-section"
-              aria-labelledby="input-heading"
-            >
-              <h2 id="input-heading">
-                <Icon name="video" />
-                视频来源
-              </h2>
+          <section className="composer" aria-labelledby="workspace-title">
+            <div className="workspace-title">
+              <h1 id="workspace-title">
+                视频转<span>文稿</span>
+              </h1>
+              <p>转写视频语音，整理为 Markdown 或纯文本。</p>
+            </div>
+            <section className="source-section" aria-labelledby="input-heading">
+              <h2 id="input-heading">导入视频</h2>
               <form onSubmit={submitLink} noValidate>
-                <label className="sr-only" htmlFor="video-url">
+                <label className="source-label" htmlFor="video-url">
                   视频链接
                 </label>
                 <div className="link-row">
@@ -225,7 +221,7 @@ export default function App() {
                       autoCapitalize="none"
                       autoCorrect="off"
                       spellCheck={false}
-                      placeholder="粘贴视频链接"
+                      placeholder="粘贴 Bilibili 或 YouTube 链接"
                       value={link}
                       disabled={!desktop}
                       aria-invalid={Boolean(link && sourceError)}
@@ -244,7 +240,7 @@ export default function App() {
                     type="submit"
                     disabled={!desktop || !link.trim() || previewing}
                   >
-                    {previewing && link ? "读取中…" : "读取链接"}
+                    {previewing && link ? "读取中…" : "读取"}
                   </button>
                 </div>
               </form>
@@ -254,13 +250,20 @@ export default function App() {
                 onClick={chooseVideo}
                 disabled={!desktop}
               >
-                <Icon name="folder" />
+                <Icon name="video" />
                 选择本地视频
               </button>
               {previewing && (
-                <p className="source-status muted" role="status">
-                  正在读取视频信息…
-                </p>
+                <div
+                  className="media media-loading media-heading enter"
+                  role="status"
+                >
+                  <span className="media-fallback" aria-hidden="true" />
+                  <div className="media-title">
+                    <p className="muted">正在读取视频信息…</p>
+                    <span className="skeleton-line" aria-hidden="true" />
+                  </div>
+                </div>
               )}
               {sourceError && (
                 <p id="source-error" className="error" role="alert">
@@ -347,29 +350,25 @@ export default function App() {
               )}
             </section>
             <section
-              className="composer-section"
+              className="output-section"
               aria-labelledby="output-heading"
             >
-              <h2 id="output-heading">
-                <Icon name="folder" />
-                保存设置
-              </h2>
+              <h2 id="output-heading">输出设置</h2>
               <div className="options">
                 <div className="option">
-                  <div className="option-label">
-                    <span>保存位置</span>
-                    {folder && (
-                      <p className="file-path" title={folder}>
-                        {folder}
-                      </p>
-                    )}
-                  </div>
+                  <span className="option-label">保存目录</span>
                   <button
                     type="button"
+                    className="directory-choice"
+                    aria-label={
+                      folder ? `更改保存目录，当前为 ${folder}` : "选择保存目录"
+                    }
+                    title={folder || undefined}
                     onClick={chooseFolder}
                     disabled={!desktop}
                   >
-                    {folder ? "更改目录" : "选择目录"}
+                    <Icon name="folder" />
+                    <span>{folder || "选择目录"}</span>
                   </button>
                 </div>
                 <div className="option">
@@ -389,7 +388,7 @@ export default function App() {
               <details className="advanced">
                 <summary>
                   <Icon name="down" />
-                  自定义整理要求
+                  整理要求
                   <small className="advanced-selection" title={prompt?.name}>
                     {prompt?.name ?? "可选"}
                   </small>

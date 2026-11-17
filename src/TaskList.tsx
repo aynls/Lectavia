@@ -16,10 +16,10 @@ const statusLabels = {
 };
 
 const phases = [
-  { id: "audio", label: "提取音轨" },
-  { id: "transcription", label: "语音转写" },
-  { id: "organization", label: "整理文稿" },
-  { id: "output", label: "保存文件" },
+  { id: "audio", label: "提取音轨", icon: "waveform" },
+  { id: "transcription", label: "语音转写", icon: "text" },
+  { id: "organization", label: "整理文稿", icon: "document" },
+  { id: "output", label: "保存文件", icon: "save" },
 ] as const;
 
 function partStatus(part: TaskPart) {
@@ -167,18 +167,24 @@ export function TaskList({ queue }: { queue: TaskQueue }) {
   const tasks = useSyncExternalStore(queue.subscribe, queue.getSnapshot);
 
   return (
-    <section className="panel queue-panel" aria-labelledby="queue-heading">
+    <section className="queue-panel" aria-labelledby="queue-heading">
       <header className="queue-header">
         <h2 id="queue-heading">任务队列</h2>
         {tasks.length > 0 && <p className="muted">{tasks.length} 项任务</p>}
       </header>
       {tasks.length === 0 ? (
         <div className="queue-empty">
-          <span className="queue-mark">
-            <Icon name="documents" />
-          </span>
-          <p>暂无任务</p>
-          <p className="muted">提交后可查看进度和生成的文稿。</p>
+          <p className="muted">暂无任务。提交后可在此查看进度和文稿。</p>
+          <ol className="queue-workflow" aria-label="处理流程" role="list">
+            {phases.map((phase) => (
+              <li key={phase.id}>
+                <span className="phase-icon">
+                  <Icon name={phase.icon} />
+                </span>
+                {phase.label}
+              </li>
+            ))}
+          </ol>
         </div>
       ) : (
         <ul className="tasks">
