@@ -44,9 +44,13 @@ fn endpoint(base_url: &str, route: &str) -> Result<Url, String> {
     }
 
     let path = url.path().trim_end_matches('/');
-    if path.ends_with("/audio/transcriptions") || path.ends_with("/chat/completions") {
+    if ["/models", "/audio/transcriptions", "/chat/completions"]
+        .iter()
+        .any(|route| path.ends_with(route))
+    {
         return Err(
-            "请输入 API Base URL，去掉 /audio/transcriptions 或 /chat/completions。".into(),
+            "请输入 API Base URL，去掉 /models、/audio/transcriptions 或 /chat/completions。"
+                .into(),
         );
     }
 
@@ -139,6 +143,31 @@ async fn send_json(request: reqwest::RequestBuilder, task: &str) -> Result<Value
             format!("{task}响应读取失败，请稍后重试。")
         }
     })
+}
+
+#[tauri::command]
+pub async fn list_models(
+    base_url: String,
+    api_key: String,
+    transcription: bool,
+) -> Result<Value, String> {
+    let mut url = endpoint(&base_url, "models")?;
+    if transcription {
+        url.query_pairs_mut()
+            .append_pair("output_modalities", "transcription");
+    }
+    let api_key = api_key.trim();
+    if api_key.is_empty() {
+        return Err("请填写 API Key。".into());
+    }
+    send_json(
+        client()?
+            .get(url)
+            .timeout(Duration::from_secs(30))
+            .bearer_auth(api_key),
+        "获取模型列表",
+    )
+    .await
 }
 
 #[tauri::command]

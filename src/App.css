@@ -340,8 +340,7 @@ legend {
   margin-top: 1rem;
 }
 
-.settings-fields label,
-.settings-fields input {
+.settings-fields :is(label, input, select) {
   display: block;
   width: 100%;
 }
@@ -349,6 +348,18 @@ legend {
 .settings-fields label {
   margin-top: 0.45rem;
   margin-bottom: 0.2rem;
+}
+
+.settings-fields {
+  min-inline-size: 0;
+}
+
+.settings-catalog {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
 }
 
 .settings-actions {

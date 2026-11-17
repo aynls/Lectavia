@@ -1,9 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export interface ModelConnection {
+interface ModelEndpoint {
   baseUrl: string;
   apiKey: string;
+}
+
+export interface ModelConnection extends ModelEndpoint {
   model: string;
+}
+
+export type ModelPurpose = "asr" | "llm";
+
+export interface CatalogModel {
+  id: string;
+  name: string;
 }
 
 interface ChatMessage {
@@ -30,7 +40,7 @@ export const OPENROUTER_ASR_MODEL = "openai/whisper-large-v3-turbo";
 
 const SECTION_SIZE = 5_000;
 
-function normalizeConnection(connection: ModelConnection): ModelConnection {
+function normalizeEndpoint(connection: ModelEndpoint): ModelEndpoint {
   const baseUrl = URL.parse(connection.baseUrl.trim());
   const isLocal =
     baseUrl && ["localhost", "127.0.0.1", "[::1]"].includes(baseUrl.hostname);
@@ -49,32 +59,62 @@ function normalizeConnection(connection: ModelConnection): ModelConnection {
 
   const path = baseUrl.pathname.replace(/\/+$/, "");
   if (
-    path.endsWith("/audio/transcriptions") ||
-    path.endsWith("/chat/completions")
+    ["/models", "/audio/transcriptions", "/chat/completions"].some((route) =>
+      path.endsWith(route),
+    )
   ) {
     throw new Error(
-      "请输入 API Base URL，去掉 /audio/transcriptions 或 /chat/completions。",
+      "请输入 API Base URL，去掉 /models、/audio/transcriptions 或 /chat/completions。",
     );
   }
 
   const apiKey = connection.apiKey.trim();
-  const model = connection.model.trim();
   if (!apiKey) {
     throw new Error("请填写 API Key。");
   }
+
+  return { baseUrl: baseUrl.href.replace(/\/+$/, ""), apiKey };
+}
+
+function normalizeConnection(connection: ModelConnection): ModelConnection {
+  const endpoint = normalizeEndpoint(connection);
+  const model = connection.model.trim();
   if (!model) {
     throw new Error("请填写模型 ID。");
   }
 
-  return {
-    baseUrl: baseUrl.href.replace(/\/+$/, ""),
-    apiKey,
-    model,
-  };
+  return { ...endpoint, model };
 }
 
 export function validateModelConnection(connection: ModelConnection): void {
   normalizeConnection(connection);
+}
+
+export async function listModels(
+  connection: ModelEndpoint,
+  purpose: ModelPurpose,
+): Promise<CatalogModel[]> {
+  const profile = normalizeEndpoint(connection);
+  const host = new URL(profile.baseUrl).hostname;
+  const transcription =
+    purpose === "asr" && ["openrouter.ai", "eu.openrouter.ai"].includes(host);
+  const result = await invoke<{
+    data?: Array<{ id?: unknown; name?: unknown }>;
+  }>("list_models", { ...profile, transcription });
+
+  if (!Array.isArray(result?.data)) {
+    throw new Error("供应商返回的模型列表格式无效。");
+  }
+
+  const models = new Map<string, CatalogModel>();
+  for (const model of result.data) {
+    const id = typeof model?.id === "string" ? model.id.trim() : "";
+    if (id) {
+      const name = typeof model.name === "string" ? model.name.trim() : "";
+      models.set(id, { id, name: name || id });
+    }
+  }
+  return [...models.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function transcribeAudio(

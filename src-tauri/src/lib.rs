@@ -13,6 +13,7 @@ pub fn run() {
             media::resolve_bilibili_short_link,
             media::prepare_media_audio,
             media::remove_media_audio,
+            models::list_models,
             models::transcribe_audio_chunk,
             models::complete_text,
             output::create_output_directory,
