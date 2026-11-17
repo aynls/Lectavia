@@ -87,14 +87,11 @@ export default {
   "task.restore": "Restore",
   "task.statusLabel": "{{title}}: {{status}}",
   "model.title": "Model settings",
-  "model.configure": "Configure models",
-  "model.notConfigured": "Set up before generating",
+  "model.notConfigured": "Not configured",
   "model.requireBoth":
     "Configure transcription and organization models before generating",
-  "model.configuredLabel":
-    "Model settings. Organization model {{llm}}, transcription model {{asr}}",
-  "model.configuredTitle": "Organization: {{llm}}\nTranscription: {{asr}}",
-  "model.configuredSummary": "Organization model · Transcription {{asr}}",
+  "model.configuredLabel": "Model settings, configured",
+  "model.configured": "Configured",
   "model.savedKey":
     "Model settings and API keys are saved in your system credential store.",
   "model.sessionKey": "API keys are kept for the current session only.",

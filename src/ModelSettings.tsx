@@ -333,31 +333,16 @@ export function ModelSettings({
         type="button"
         className="settings-trigger"
         data-configured={configured}
-        aria-label={
-          configured
-            ? t("model.configuredLabel", {
-                llm: value.llm.model,
-                asr: value.asr.model,
-              })
-            : t("model.requireBoth")
-        }
-        title={
-          configured
-            ? t("model.configuredTitle", {
-                llm: value.llm.model,
-                asr: value.asr.model,
-              })
-            : t("model.requireBoth")
-        }
+        aria-label={t(
+          configured ? "model.configuredLabel" : "model.requireBoth",
+        )}
         onClick={openSettings}
       >
         <Icon name="settings" />
         <span className="settings-trigger-copy">
-          <strong>{configured ? value.llm.model : t("model.configure")}</strong>
+          <strong>{t("model.title")}</strong>
           <small>
-            {configured
-              ? t("model.configuredSummary", { asr: value.asr.model })
-              : t("model.notConfigured")}
+            {t(configured ? "model.configured" : "model.notConfigured")}
           </small>
         </span>
         <Icon name={configured ? "check" : "warning"} />

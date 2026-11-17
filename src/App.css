@@ -927,6 +927,33 @@ textarea {
   margin: 0;
 }
 
+.action-details {
+  display: grid;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.model-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.25rem 0.75rem;
+  align-items: baseline;
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.model-summary dt {
+  color: var(--muted);
+}
+
+.model-summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.model-summary code {
+  font-family: Consolas, monospace;
+}
 .readiness {
   display: flex;
   align-items: flex-start;
@@ -1693,7 +1720,7 @@ textarea {
   }
 
   .settings-trigger {
-    width: min(12rem, 48vw);
+    min-width: 0;
     padding-inline: 0.5rem;
   }
 

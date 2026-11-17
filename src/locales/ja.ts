@@ -87,14 +87,11 @@ export default {
   "task.restore": "復元",
   "task.statusLabel": "{{title}}：{{status}}",
   "model.title": "モデル設定",
-  "model.configure": "モデルを設定",
-  "model.notConfigured": "未設定。原稿の作成前に設定してください",
+  "model.notConfigured": "未設定",
   "model.requireBoth":
     "原稿の作成前に文字起こしと整理のモデルを設定してください",
-  "model.configuredLabel":
-    "モデル設定。整理モデル {{llm}}、文字起こしモデル {{asr}}",
-  "model.configuredTitle": "整理：{{llm}}\n文字起こし：{{asr}}",
-  "model.configuredSummary": "整理モデル · 文字起こし {{asr}}",
+  "model.configuredLabel": "モデル設定、設定済み",
+  "model.configured": "設定済み",
   "model.savedKey":
     "モデル設定と API キーはシステムの資格情報ストアに保存されます。",
   "model.sessionKey": "API キーはアプリを終了するまで保持されます。",

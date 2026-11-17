@@ -805,12 +805,28 @@ export default function App({
                   {renderMessage(t, formError)}
                 </p>
               )}
-              {nextStep && (
-                <div className="readiness">
-                  <Icon name="warning" />
-                  <p id="next-step" role="status">
-                    {nextStep}
-                  </p>
+              {(settings || nextStep) && (
+                <div className="action-details">
+                  {settings && (
+                    <dl className="model-summary">
+                      <dt>{t("model.purpose.asr")}</dt>
+                      <dd>
+                        <code>{settings.asr.model}</code>
+                      </dd>
+                      <dt>{t("model.purpose.llm")}</dt>
+                      <dd>
+                        <code>{settings.llm.model}</code>
+                      </dd>
+                    </dl>
+                  )}
+                  {nextStep && (
+                    <div className="readiness">
+                      <Icon name="warning" />
+                      <p id="next-step" role="status">
+                        {nextStep}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
               <button
