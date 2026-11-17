@@ -322,7 +322,6 @@ export default function App() {
         ...settings,
       });
       rememberFolder(folder);
-      removeVideo();
       setJustQueued(true);
     } catch (error) {
       setFolderStatus("error");
