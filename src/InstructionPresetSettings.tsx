@@ -333,7 +333,7 @@ export function InstructionPresetSettings({
         onClose={() => showList()}
       >
         <div className="settings-form">
-          <header className="settings-header">
+          <header className="settings-header preset-header">
             <h2 id="preset-title">
               {t(
                 view.kind === "edit"
@@ -347,28 +347,36 @@ export function InstructionPresetSettings({
                       : "output.presets",
               )}
             </h2>
-            <button
-              type="button"
-              className="quiet icon-button"
-              aria-label={t("preset.close")}
-              onClick={() => dialog.current?.close()}
-            >
-              <Icon name="close" />
-            </button>
+            <div className="preset-header-actions">
+              {view.kind === "list" && (
+                <button
+                  type="button"
+                  ref={createButton}
+                  className="primary preset-create-button"
+                  onClick={() => setView({ kind: "edit" })}
+                >
+                  <Icon name="plus" />
+                  {t("preset.create")}
+                </button>
+              )}
+              <button
+                type="button"
+                className="quiet icon-button"
+                aria-label={t("preset.close")}
+                onClick={() => dialog.current?.close()}
+              >
+                <Icon name="close" />
+              </button>
+            </div>
           </header>
           {view.kind === "list" && (
-            <>
-              <div className="settings-body preset-body">
-                {presets.length > 0 ? (
-                  <ul className="preset-list">
-                    {presets.map((preset) => (
-                      <li key={preset.id} className="preset-row">
-                        <div className="preset-row-copy">
-                          <h3>{preset.name}</h3>
-                          <p className="muted">
-                            {preset.prompt?.content ?? preset.instructions}
-                          </p>
-                        </div>
+            <div className="settings-body preset-body preset-list-body">
+              {presets.length > 0 ? (
+                <ul className="preset-list">
+                  {presets.map((preset) => (
+                    <li key={preset.id} className="preset-row">
+                      <div className="preset-row-heading">
+                        <h3>{preset.name}</h3>
                         <div className="actions preset-row-actions">
                           <button
                             type="button"
@@ -395,27 +403,17 @@ export function InstructionPresetSettings({
                             {t("preset.delete")}
                           </button>
                         </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="muted">{t("preset.empty")}</p>
-                )}
-              </div>
-              <footer className="settings-footer">
-                <div className="actions settings-actions">
-                  <button
-                    type="button"
-                    ref={createButton}
-                    className="primary"
-                    onClick={() => setView({ kind: "edit" })}
-                  >
-                    <Icon name="plus" />
-                    {t("preset.create")}
-                  </button>
-                </div>
-              </footer>
-            </>
+                      </div>
+                      <p className="muted preset-preview">
+                        {preset.prompt?.content ?? preset.instructions}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted preset-empty">{t("preset.empty")}</p>
+              )}
+            </div>
           )}
           {view.kind === "edit" && (
             <PresetEditor
