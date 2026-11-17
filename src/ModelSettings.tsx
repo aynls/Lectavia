@@ -1,10 +1,17 @@
-import { useId, useRef, useState, type SubmitEvent } from "react";
+import {
+  useId,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type Ref,
+  type SubmitEvent,
+} from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { Icon } from "./Icon";
 import {
   errorMessage,
-  message,
   redactMessage,
   renderMessage,
   type Message,
@@ -16,12 +23,53 @@ import {
   validateModelConnection,
   type CatalogModel,
   type ModelConnection,
+  type ModelConnectionErrors,
+  type ModelConnectionField,
   type ModelPurpose,
 } from "./models";
 
 export interface ModelSettingsValue {
   asr: ModelConnection;
   llm: ModelConnection;
+}
+
+interface ModelSettingsOpenOptions {
+  purpose?: ModelPurpose;
+  onSaved?: (value: ModelSettingsValue) => void;
+}
+
+export interface ModelSettingsHandle {
+  open: (options?: ModelSettingsOpenOptions) => void;
+}
+
+interface ModelSettingsFocus {
+  purpose: ModelPurpose;
+  field: ModelConnectionField;
+}
+
+type SettingsErrors = Record<ModelPurpose, ModelConnectionErrors>;
+
+const connectionFields = ["baseUrl", "apiKey", "model"] as const;
+const modelPurposes = ["asr", "llm"] as const;
+
+function firstInvalidField(errors: ModelConnectionErrors) {
+  return connectionFields.find((field) => errors[field]);
+}
+
+function validateSettings(value: ModelSettingsValue): SettingsErrors {
+  return {
+    asr: validateModelConnection(value.asr),
+    llm: validateModelConnection(value.llm),
+  };
+}
+
+function firstInvalidSetting(
+  errors: SettingsErrors,
+): ModelSettingsFocus | undefined {
+  for (const purpose of modelPurposes) {
+    const field = firstInvalidField(errors[purpose]);
+    if (field) return { purpose, field };
+  }
 }
 
 export const defaultModelSettings: ModelSettingsValue = {
@@ -118,11 +166,16 @@ function ReasoningField({
 
 function ProviderFields({
   connection,
+  errors,
   setConnection,
   purpose,
 }: {
   connection: ModelConnection;
-  setConnection: (connection: ModelConnection) => void;
+  errors?: ModelConnectionErrors;
+  setConnection: (
+    connection: ModelConnection,
+    changedField?: ModelConnectionField,
+  ) => void;
   purpose: ModelPurpose;
 }) {
   const { t } = useTranslation();
@@ -140,31 +193,37 @@ function ProviderFields({
   const useManualModel = manualModel || !selected;
   const loading = Boolean(catalog && !catalog.error && !catalog.models);
 
-  function editEndpoint(
-    changes: Partial<Pick<ModelConnection, "baseUrl" | "apiKey">>,
-  ) {
+  function editEndpoint(field: "baseUrl" | "apiKey", value: string) {
     const providerChanged =
-      changes.baseUrl !== undefined &&
-      changes.baseUrl.trim().replace(/\/+$/, "") !==
+      field === "baseUrl" &&
+      value.trim().replace(/\/+$/, "") !==
         connection.baseUrl.trim().replace(/\/+$/, "");
     request.current++;
     setLookup(undefined);
-    setConnection({
-      ...connection,
-      ...changes,
-      reasoningEffort: providerChanged ? undefined : connection.reasoningEffort,
-    });
+    setConnection(
+      {
+        ...connection,
+        [field]: value,
+        reasoningEffort: providerChanged
+          ? undefined
+          : connection.reasoningEffort,
+      },
+      field,
+    );
   }
 
   function editModel(model: string) {
-    setConnection({
-      ...connection,
-      model,
-      reasoningEffort:
-        model.trim() === connection.model.trim()
-          ? connection.reasoningEffort
-          : undefined,
-    });
+    setConnection(
+      {
+        ...connection,
+        model,
+        reasoningEffort:
+          model.trim() === connection.model.trim()
+            ? connection.reasoningEffort
+            : undefined,
+      },
+      "model",
+    );
   }
 
   async function fetchModels() {
@@ -187,8 +246,25 @@ function ProviderFields({
     }
   }
 
+  function inputState(field: ModelConnectionField) {
+    return {
+      "data-model-field": field,
+      "aria-invalid": Boolean(errors?.[field]),
+      "aria-describedby": errors?.[field] ? `${id}-${field}-error` : undefined,
+    };
+  }
+
+  function renderFieldError(field: ModelConnectionField) {
+    const error = errors?.[field];
+    return error ? (
+      <p id={`${id}-${field}-error`} className="error field-error">
+        {renderMessage(t, error)}
+      </p>
+    ) : null;
+  }
+
   return (
-    <fieldset className="settings-fields">
+    <fieldset className="settings-fields" data-model-purpose={purpose}>
       <legend>{t(`model.purpose.${purpose}`)}</legend>
       <label htmlFor={id + "-url"}>{t("model.baseUrl")}</label>
       <input
@@ -198,8 +274,10 @@ function ProviderFields({
         value={connection.baseUrl}
         required
         spellCheck={false}
-        onChange={(event) => editEndpoint({ baseUrl: event.target.value })}
+        {...inputState("baseUrl")}
+        onChange={(event) => editEndpoint("baseUrl", event.target.value)}
       />
+      {renderFieldError("baseUrl")}
       <label htmlFor={id + "-key"}>{t("model.apiKey")}</label>
       <input
         id={id + "-key"}
@@ -208,8 +286,10 @@ function ProviderFields({
         autoComplete="off"
         value={connection.apiKey}
         required
-        onChange={(event) => editEndpoint({ apiKey: event.target.value })}
+        {...inputState("apiKey")}
+        onChange={(event) => editEndpoint("apiKey", event.target.value)}
       />
+      {renderFieldError("apiKey")}
       {models.length > 0 && (
         <>
           <label htmlFor={id + "-catalog"}>{t("model.select")}</label>
@@ -242,8 +322,10 @@ function ProviderFields({
             required
             placeholder={t("model.idPlaceholder")}
             spellCheck={false}
+            {...inputState("model")}
             onChange={(event) => editModel(event.target.value)}
           />
+          {renderFieldError("model")}
         </>
       )}
       <div className="settings-catalog">
@@ -279,44 +361,86 @@ function ProviderFields({
 }
 
 export function ModelSettings({
+  ref,
   value,
   configured,
   onSave,
 }: {
+  ref?: Ref<ModelSettingsHandle>;
   value: ModelSettingsValue;
   configured: boolean;
   onSave: (value: ModelSettingsValue) => Promise<void>;
 }) {
   const { t } = useTranslation();
+  const triggerId = useId();
   const modal = useRef<HTMLDialogElement>(null);
-  const firstField = useRef<HTMLFieldSetElement>(null);
+  const savedCallback = useRef<ModelSettingsOpenOptions["onSaved"]>(undefined);
   const [draft, setDraft] = useState(value);
   const [error, setError] = useState<Message>();
+  const [validation, setValidation] = useState<SettingsErrors>();
+  const [focus, setFocus] = useState<ModelSettingsFocus>();
   const [saving, setSaving] = useState(false);
 
-  function openSettings() {
+  useLayoutEffect(() => {
+    if (!focus || !modal.current?.open) return;
+    const { purpose, field } = focus;
+    modal.current
+      .querySelector<HTMLInputElement>(
+        `[data-model-purpose="${purpose}"] [data-model-field="${field}"]`,
+      )
+      ?.focus();
+  }, [focus]);
+
+  function openSettings(options: ModelSettingsOpenOptions = {}) {
+    const dialog = modal.current;
+    if (!dialog || dialog.open) return;
+
+    const errors = validateSettings(value);
     setDraft(value);
     setError(undefined);
-    modal.current?.showModal();
-    firstField.current?.querySelector("input")?.focus();
+    setValidation(undefined);
+    setFocus(
+      options.purpose
+        ? {
+            purpose: options.purpose,
+            field: firstInvalidField(errors[options.purpose]) ?? "baseUrl",
+          }
+        : (firstInvalidSetting(errors) ?? { purpose: "asr", field: "baseUrl" }),
+    );
+    savedCallback.current = options.onSaved;
+    dialog.showModal();
+  }
+
+  useImperativeHandle(ref, () => ({ open: openSettings }));
+
+  function updateDraft(
+    purpose: ModelPurpose,
+    connection: ModelConnection,
+    changedField?: ModelConnectionField,
+  ) {
+    setDraft((current) => ({ ...current, [purpose]: connection }));
+    if (changedField) {
+      setValidation(
+        (current) =>
+          current && {
+            ...current,
+            [purpose]: { ...current[purpose], [changedField]: undefined },
+          },
+      );
+    }
   }
 
   async function saveSettings(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (saving) return;
 
-    for (const purpose of ["asr", "llm"] as const) {
-      try {
-        validateModelConnection(draft[purpose]);
-      } catch (error) {
-        setError(
-          message("error.modelSetting", {
-            purpose: message(`model.purpose.${purpose}`),
-            cause: errorMessage(error),
-          }),
-        );
-        return;
-      }
+    const errors = validateSettings(draft);
+    const invalidField = firstInvalidSetting(errors);
+    if (invalidField) {
+      setError(undefined);
+      setValidation(errors);
+      setFocus(invalidField);
+      return;
     }
 
     const form = new FormData(event.currentTarget);
@@ -325,10 +449,10 @@ export function ModelSettings({
     const reasoningEffort =
       typeof effort === "string" ? effort.trim() || undefined : undefined;
 
+    const next = { ...draft, llm: { ...draft.llm, reasoningEffort } };
     setSaving(true);
     try {
-      await onSave({ ...draft, llm: { ...draft.llm, reasoningEffort } });
-      modal.current?.close();
+      await onSave(next);
     } catch (error) {
       setError(
         redactMessage(errorMessage(error, "error.saveModelSettings"), [
@@ -336,9 +460,14 @@ export function ModelSettings({
           draft.llm.apiKey,
         ]),
       );
+      return;
     } finally {
       setSaving(false);
     }
+    const onSaved = savedCallback.current;
+    savedCallback.current = undefined;
+    modal.current?.close();
+    onSaved?.(next);
   }
 
   return (
@@ -347,15 +476,15 @@ export function ModelSettings({
         type="button"
         className="settings-trigger"
         data-configured={configured}
-        aria-label={t(
-          configured ? "model.configuredLabel" : "model.requireBoth",
-        )}
-        onClick={openSettings}
+        aria-haspopup="dialog"
+        aria-labelledby={`${triggerId}-label`}
+        aria-describedby={`${triggerId}-status`}
+        onClick={() => openSettings()}
       >
         <Icon name="settings" />
         <span className="settings-trigger-copy">
-          <strong>{t("model.title")}</strong>
-          <small>
+          <strong id={`${triggerId}-label`}>{t("model.title")}</strong>
+          <small id={`${triggerId}-status`}>
             {t(configured ? "model.configured" : "model.notConfigured")}
           </small>
         </span>
@@ -368,6 +497,9 @@ export function ModelSettings({
         aria-describedby="settings-description"
         onCancel={(event) => {
           if (saving) event.preventDefault();
+        }}
+        onClose={(event) => {
+          if (!event.currentTarget.open) savedCallback.current = undefined;
         }}
       >
         <form
@@ -393,25 +525,18 @@ export function ModelSettings({
               <Icon name="close" />
             </button>
           </header>
-          <fieldset
-            className="settings-body"
-            ref={firstField}
-            disabled={saving}
-          >
-            <ProviderFields
-              connection={draft.asr}
-              setConnection={(asr) =>
-                setDraft((current) => ({ ...current, asr }))
-              }
-              purpose="asr"
-            />
-            <ProviderFields
-              connection={draft.llm}
-              setConnection={(llm) =>
-                setDraft((current) => ({ ...current, llm }))
-              }
-              purpose="llm"
-            />
+          <fieldset className="settings-body" disabled={saving}>
+            {modelPurposes.map((purpose) => (
+              <ProviderFields
+                key={purpose}
+                connection={draft[purpose]}
+                errors={validation?.[purpose]}
+                setConnection={(connection, changedField) =>
+                  updateDraft(purpose, connection, changedField)
+                }
+                purpose={purpose}
+              />
+            ))}
           </fieldset>
           <div className="settings-footer">
             {error && (

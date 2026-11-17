@@ -114,10 +114,7 @@ export default {
   "task.statusLabel": "{{title}}：{{status}}",
   "model.title": "モデル設定",
   "model.notConfigured": "未設定",
-  "model.requireBoth":
-    "原稿の作成前に文字起こしと整理のモデルを設定してください",
-  "model.configuredLabel": "モデル設定、設定済み",
-  "model.configured": "設定済み",
+  "model.configured": "保存済み",
   "model.savedKey":
     "モデル設定と API キーはシステムの資格情報ストアに保存されます。",
   "model.sessionKey": "API キーはアプリを終了するまで保持されます。",
@@ -271,7 +268,6 @@ export default {
     "モデルの出力上限に達したため、保存を中止しました。出力上限の大きいモデルを選択してください。",
   "error.modelRefusal": "原稿の整理モデルがこの内容の処理を拒否しました。",
   "error.modelEmpty": "原稿の整理モデルから利用可能な本文が返りませんでした。",
-  "error.modelSetting": "{{purpose}}：{{cause}}",
   "error.saveInstructionPreset":
     "整理指示のプリセットをこの端末に保存できませんでした。",
   "error.deleteInstructionPreset":

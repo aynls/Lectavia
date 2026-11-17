@@ -1,5 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
-import { errorMessage, message, translator, type Locale } from "./i18n";
+import {
+  errorMessage,
+  message,
+  translator,
+  type Locale,
+  type Message,
+} from "./i18n";
 
 interface ModelEndpoint {
   baseUrl: string;
@@ -12,6 +18,10 @@ export interface ModelConnection extends ModelEndpoint {
 }
 
 export type ModelPurpose = "asr" | "llm";
+export type ModelConnectionField = keyof ModelEndpoint | "model";
+export type ModelConnectionErrors = Partial<
+  Record<ModelConnectionField, Message>
+>;
 
 export interface CatalogModel {
   id: string;
@@ -51,8 +61,8 @@ export const OPENROUTER_ASR_MODEL = "openai/whisper-large-v3-turbo";
 
 const SECTION_SIZE = 5_000;
 
-function normalizeEndpoint(connection: ModelEndpoint): ModelEndpoint {
-  const baseUrl = URL.parse(connection.baseUrl.trim());
+function baseUrlField(value: string): string | Message {
+  const baseUrl = URL.parse(value.trim());
   const isLocal =
     baseUrl && ["localhost", "127.0.0.1", "[::1]"].includes(baseUrl.hostname);
 
@@ -65,7 +75,7 @@ function normalizeEndpoint(connection: ModelEndpoint): ModelEndpoint {
     baseUrl.search ||
     baseUrl.hash
   ) {
-    throw message("error.baseUrl");
+    return message("error.baseUrl");
   }
 
   const path = baseUrl.pathname.replace(/\/+$/, "");
@@ -74,29 +84,53 @@ function normalizeEndpoint(connection: ModelEndpoint): ModelEndpoint {
       path.endsWith(route),
     )
   ) {
-    throw message("error.baseUrlHasRoute");
+    return message("error.baseUrlHasRoute");
   }
 
-  const apiKey = connection.apiKey.trim();
-  if (!apiKey) {
-    throw message("error.apiKey");
-  }
+  return baseUrl.href.replace(/\/+$/, "");
+}
 
-  return { baseUrl: baseUrl.href.replace(/\/+$/, ""), apiKey };
+function endpointFields(connection: ModelEndpoint) {
+  return {
+    baseUrl: baseUrlField(connection.baseUrl),
+    apiKey: connection.apiKey.trim() || message("error.apiKey"),
+  };
+}
+
+function modelField(value: string): string | Message {
+  return value.trim() || message("error.modelId");
+}
+
+function requireValidField(value: string | Message): string {
+  if (typeof value !== "string") throw value;
+  return value;
+}
+
+function normalizeEndpoint(connection: ModelEndpoint): ModelEndpoint {
+  const { baseUrl, apiKey } = endpointFields(connection);
+  return {
+    baseUrl: requireValidField(baseUrl),
+    apiKey: requireValidField(apiKey),
+  };
 }
 
 function normalizeConnection(connection: ModelConnection): ModelConnection {
-  const endpoint = normalizeEndpoint(connection);
-  const model = connection.model.trim();
-  if (!model) {
-    throw message("error.modelId");
-  }
-
-  return { ...endpoint, model };
+  return {
+    ...normalizeEndpoint(connection),
+    model: requireValidField(modelField(connection.model)),
+  };
 }
 
-export function validateModelConnection(connection: ModelConnection): void {
-  normalizeConnection(connection);
+export function validateModelConnection(
+  connection: ModelConnection,
+): ModelConnectionErrors {
+  const { baseUrl, apiKey } = endpointFields(connection);
+  const model = modelField(connection.model);
+  return {
+    baseUrl: typeof baseUrl === "string" ? undefined : baseUrl,
+    apiKey: typeof apiKey === "string" ? undefined : apiKey,
+    model: typeof model === "string" ? undefined : model,
+  };
 }
 
 export async function listModels(

@@ -959,6 +959,13 @@ legend {
   color: var(--warning);
 }
 
+button.readiness-action {
+  justify-self: start;
+  min-height: 2.25rem;
+  padding: 0.375rem 0.625rem;
+  color: var(--accent-text);
+}
+
 .generate {
   grid-column: -2 / -1;
   justify-content: space-between;
@@ -1196,6 +1203,14 @@ legend {
 
 .settings-fields :is(label, input, select) {
   width: 100%;
+}
+
+.settings-fields input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.settings-fields .field-error {
+  margin-block-start: 0.375rem;
 }
 
 .settings-fields label {

@@ -32,6 +32,7 @@ import { inspectMedia, partLabel, type MediaInfo } from "./media";
 import {
   defaultModelSettings,
   ModelSettings,
+  type ModelSettingsHandle,
   type ModelSettingsValue,
 } from "./ModelSettings";
 import { TaskList } from "./TaskList";
@@ -95,6 +96,7 @@ export default function App({
   const [settings, setSettings] = useState(initialSettings);
   const [queueing, setQueueing] = useState(false);
   const composer = useRef<HTMLElement>(null);
+  const modelSettings = useRef<ModelSettingsHandle>(null);
   const restoreDialog = useRef<HTMLDialogElement>(null);
   const pendingRestoreId = useRef("");
   const workspaceRevision = useRef(0);
@@ -138,7 +140,6 @@ export default function App({
   } else if (selected.size === 0) {
     missing.push(t("workspace.need.parts"));
   }
-  if (!settings) missing.push(t("workspace.need.models"));
   if (folderStatus === "error" || (!folder && folderStatus !== "checking")) {
     missing.push(t("workspace.need.folder"));
   }
@@ -521,6 +522,7 @@ export default function App({
               onPickFile={desktop ? pickPromptFile : undefined}
             />
             <ModelSettings
+              ref={modelSettings}
               value={settings ?? defaultModelSettings}
               configured={settings !== null}
               onSave={async (next) => {
@@ -897,7 +899,7 @@ export default function App({
                   {renderMessage(t, formError)}
                 </p>
               )}
-              {(settings || nextStep) && (
+              {(settings || nextStep || desktop) && (
                 <div className="action-details">
                   {settings && (
                     <dl className="model-summary">
@@ -918,6 +920,22 @@ export default function App({
                         {nextStep}
                       </p>
                     </div>
+                  )}
+                  {desktop && !settings && (
+                    <button
+                      type="button"
+                      className="quiet readiness-action"
+                      aria-haspopup="dialog"
+                      onClick={() =>
+                        modelSettings.current?.open({
+                          onSaved: () =>
+                            composer.current?.focus({ preventScroll: true }),
+                        })
+                      }
+                    >
+                      <Icon name="settings" />
+                      {t("workspace.need.models")}
+                    </button>
                   )}
                 </div>
               )}

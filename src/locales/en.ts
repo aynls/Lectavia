@@ -113,10 +113,7 @@ export default {
   "task.statusLabel": "{{title}}: {{status}}",
   "model.title": "Model settings",
   "model.notConfigured": "Not configured",
-  "model.requireBoth":
-    "Configure transcription and organization models before generating",
-  "model.configuredLabel": "Model settings, configured",
-  "model.configured": "Configured",
+  "model.configured": "Saved",
   "model.savedKey":
     "Model settings and API keys are saved in your system credential store.",
   "model.sessionKey": "API keys are kept for the current session only.",
@@ -266,7 +263,6 @@ export default {
     "The organization model declined to process this content.",
   "error.modelEmpty":
     "The organization model returned no usable document text.",
-  "error.modelSetting": "{{purpose}}: {{cause}}",
   "error.saveInstructionPreset":
     "Could not save the instruction preset on this device.",
   "error.deleteInstructionPreset": "Could not delete the instruction preset.",
