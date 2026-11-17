@@ -6,7 +6,7 @@ import {
   type MediaPart,
 } from "./media";
 import {
-  organizeStudyMaterial,
+  organizeTranscript,
   transcribeAudio,
   type ModelConnection,
 } from "./models";
@@ -266,7 +266,7 @@ export class TaskQueue {
         }
 
         setPhase("organization");
-        part.material = await organizeStudyMaterial(part.transcript, {
+        part.material = await organizeTranscript(part.transcript, {
           connection: job.llm,
           title: part.media.title || job.task.title,
           format: job.format,

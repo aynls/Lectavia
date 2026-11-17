@@ -1,7 +1,7 @@
 [package]
 name = "lectavia"
 version = "0.1.0"
-description = "Turn videos into study material."
+description = "Transcribe and organize videos into editable documents."
 license = "MIT"
 edition = "2024"
 

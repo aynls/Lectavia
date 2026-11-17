@@ -253,7 +253,7 @@ pub async fn complete_text(
             .timeout(Duration::from_secs(180))
             .bearer_auth(api_key)
             .json(&body),
-        "资料整理",
+        "文稿整理",
     )
     .await
 }

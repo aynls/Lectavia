@@ -18,7 +18,7 @@ const statusLabels = {
 const phases = [
   { id: "audio", label: "提取音轨" },
   { id: "transcription", label: "语音转写" },
-  { id: "organization", label: "整理资料" },
+  { id: "organization", label: "整理文稿" },
   { id: "output", label: "保存文件" },
 ] as const;
 
@@ -137,8 +137,8 @@ function TaskCard({ task, queue }: { task: Task; queue: TaskQueue }) {
               {revealing
                 ? "正在打开…"
                 : task.outputDirectory
-                  ? "打开成品目录"
-                  : "定位成品"}
+                  ? "打开输出目录"
+                  : "定位文稿"}
             </button>
           )}
           {canRetry && (
@@ -178,7 +178,7 @@ export function TaskList({ queue }: { queue: TaskQueue }) {
             <Icon name="documents" />
           </span>
           <p>暂无任务</p>
-          <p className="muted">生成后在这里查看进度和成品。</p>
+          <p className="muted">提交后可查看进度和生成的文稿。</p>
         </div>
       ) : (
         <ul className="tasks">

@@ -122,8 +122,8 @@ pub async fn write_output(
 
     let title = safe_title(&title);
     let stem = match part_index {
-        Some(number) => format!("P{number:02}-{title}-学习资料"),
-        None => format!("{title}-学习资料"),
+        Some(number) => format!("P{number:02}-{title}-文稿"),
+        None => format!("{title}-文稿"),
     };
 
     // Finish writing beside the final file before publishing it without replacing existing files.
@@ -132,7 +132,7 @@ pub async fn write_output(
     pending
         .write_all(content.as_bytes())
         .and_then(|()| pending.as_file().sync_all())
-        .map_err(|error| format!("无法写入学习资料：{error}"))?;
+        .map_err(|error| format!("无法写入文稿：{error}"))?;
 
     let mut number = 1;
     loop {
@@ -143,7 +143,7 @@ pub async fn write_output(
                 pending = error.file;
                 number += 1;
             }
-            Err(error) => return Err(format!("无法保存学习资料：{}", error.error)),
+            Err(error) => return Err(format!("无法保存文稿：{}", error.error)),
         }
     }
 }
@@ -216,8 +216,8 @@ mod tests {
             let second_file = write_output(folder, title, "md".into(), "新稿".into(), Some(2))
                 .await
                 .unwrap();
-            assert!(first_file.ends_with("P02-课程-学习资料.md"));
-            assert!(second_file.ends_with("P02-课程-学习资料 (2).md"));
+            assert!(first_file.ends_with("P02-课程-文稿.md"));
+            assert!(second_file.ends_with("P02-课程-文稿 (2).md"));
             assert_eq!(fs::read_to_string(first_file).unwrap(), "初稿");
             assert_eq!(fs::read_to_string(second_file).unwrap(), "新稿");
         });

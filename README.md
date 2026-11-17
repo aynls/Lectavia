@@ -1,6 +1,6 @@
 # Lectavia
 
-把 Bilibili、YouTube 或本地视频整理为 Markdown 或纯文本学习资料。
+转写 Bilibili、YouTube 或本地视频中的语音，整理为可编辑的 Markdown 或纯文本文稿。
 
 ## 本地开发
 
@@ -19,11 +19,11 @@ powershell -ExecutionPolicy Bypass -File scripts/setup-media.ps1
 pnpm tauri dev
 ```
 
-## 生成学习资料
+## 生成文稿
 
-1. 打开「模型设置」，分别填写语音转写与资料整理的 API Base URL 和 API Key。可以获取供应商的模型列表后选择，也可以直接填写模型 ID。资料整理会自动显示模型目录公布的思考强度，也可以手动填写。留空时使用供应商默认设置。语音转写预设为 OpenRouter 和 `openai/whisper-large-v3-turbo`。
+1. 打开「模型设置」，分别填写语音转写与文稿整理的 API Base URL 和 API Key。可以获取供应商的模型列表后选择，也可以直接填写模型 ID。文稿整理会自动显示模型目录公布的思考强度，也可以手动填写。留空时使用供应商默认设置。语音转写预设为 OpenRouter 和 `openai/whisper-large-v3-turbo`。
 2. 粘贴视频链接或选择本地视频。Bilibili 多 P 视频可勾选要生成的分 P。
-3. 选择输出目录和文件格式，可选一个 UTF-8 Markdown 文件补充整理要求。点击「生成学习资料」后，在任务队列查看进度和成品位置。
+3. 选择输出目录和文件格式，可选一个 UTF-8 Markdown 文件补充整理要求。点击「生成文稿」后，在任务队列查看进度和文稿位置。
 
 转写服务需支持 OpenAI 兼容的 `POST /audio/transcriptions`，整理服务需支持 `POST /chat/completions`。配置与队列仅在本次运行期间保存在内存中。生成的文件保存在用户选择的目录。
 

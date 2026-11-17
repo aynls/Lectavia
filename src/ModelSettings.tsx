@@ -33,7 +33,7 @@ interface CatalogLookup {
 
 const purposeLabels: Record<ModelPurpose, string> = {
   asr: "语音转写",
-  llm: "资料整理",
+  llm: "文稿整理",
 };
 
 function ReasoningField({
@@ -324,7 +324,7 @@ export function ModelSettings({
             <div>
               <h2 id="settings-title">模型设置</h2>
               <p id="settings-description" className="muted">
-                配置语音转写和资料整理的 OpenAI
+                配置语音转写和文稿整理的 OpenAI
                 兼容服务。密钥仅在本次运行期间保留。
               </p>
             </div>

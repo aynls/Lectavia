@@ -46,7 +46,7 @@ export default function App() {
         : selected.size === 0
           ? "请至少选择一个分 P。"
           : !folder
-            ? "请选择资料的保存目录。"
+            ? "请先选择保存目录。"
             : !settings
               ? "请先在右上角配置模型。"
               : "";
@@ -194,14 +194,14 @@ export default function App() {
       </header>
       <main className="app-width">
         <div className="workspace-title">
-          <h1>从视频生成学习资料</h1>
-          <p>导入 Bilibili、YouTube 或本地视频，将讲解整理为本地文档。</p>
+          <h1>视频转文稿</h1>
+          <p>将视频中的语音转写、整理为 Markdown 或纯文本。</p>
         </div>
         {!desktop && (
           <p className="notice">请在 Lectavia 桌面应用中处理视频。</p>
         )}
         <div className="workspace">
-          <section className="panel composer" aria-label="生成学习资料">
+          <section className="panel composer" aria-label="生成文稿">
             <section
               className="composer-section"
               aria-labelledby="input-heading"
@@ -439,7 +439,7 @@ export default function App() {
                 aria-describedby="next-step"
                 onClick={generate}
               >
-                生成学习资料
+                生成文稿
                 <Icon name="arrow" />
               </button>
             </div>
