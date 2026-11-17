@@ -585,17 +585,6 @@ button.primary:disabled {
   background: var(--surface-strong);
 }
 
-.source-hint,
-.field-hint {
-  color: var(--muted);
-  font-size: 0.78rem;
-  line-height: 1.6;
-}
-
-.source-hint {
-  margin-top: 0.625rem;
-}
-
 .local-picker {
   justify-content: flex-start;
   width: 100%;
@@ -867,10 +856,6 @@ textarea {
   line-height: 1.65;
 }
 
-.field-hint {
-  margin-top: 0.45rem;
-}
-
 .prompt-import {
   display: flex;
   align-items: center;
@@ -942,11 +927,8 @@ textarea {
   color: var(--accent-text);
 }
 
-.readiness[data-ready="true"] {
-  color: var(--ink);
-}
-
 .generate {
+  grid-column: -2 / -1;
   justify-content: space-between;
   width: 100%;
   min-height: 3.5rem;

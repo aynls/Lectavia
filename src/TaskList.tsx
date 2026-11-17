@@ -178,7 +178,6 @@ export function TaskList({ queue }: { queue: TaskQueue }) {
             <Icon name="document" />
           </span>
           <h3>还没有任务</h3>
-          <p className="muted">生成后可在这里查看进度并打开文稿。</p>
         </div>
       ) : (
         <ul className="tasks">

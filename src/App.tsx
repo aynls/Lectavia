@@ -69,7 +69,6 @@ export default function App() {
   const [instructions, setInstructions] = useState("");
   const [prompt, setPrompt] = useState<PromptFile | null>(null);
   const [settings, setSettings] = useState<ModelSettingsValue | null>(null);
-  const [justQueued, setJustQueued] = useState(false);
   const [queueing, setQueueing] = useState(false);
   const linkInput = useRef<HTMLInputElement>(null);
   const requestId = useRef(0);
@@ -104,17 +103,10 @@ export default function App() {
     missing.push("选择可用的保存目录");
   }
 
-  const nextStep = justQueued
-    ? "已加入任务队列，可以继续添加下一个视频。"
-    : previewing
-      ? "正在解析视频，确认标题和分 P 后即可生成。"
-      : queueing
-        ? "正在确认保存目录，随后加入任务队列。"
-        : missing.length
-          ? `还需：${missing.join("、")}。`
-          : folderStatus === "checking"
-            ? "正在准备默认保存目录。"
-            : `已就绪，将生成 ${selected.size} 份${format === "md" ? " Markdown" : "纯文本"}文稿。`;
+  const nextStep =
+    desktop && !previewing && !queueing && missing.length > 0
+      ? `请先${missing.join("、")}。`
+      : undefined;
 
   useEffect(() => {
     if (!desktop) return;
@@ -169,7 +161,6 @@ export default function App() {
 
     clearPreview();
     setFormError("");
-    setJustQueued(false);
     const id = requestId.current;
     previewKey.current = key;
     setPreviewing(true);
@@ -205,7 +196,6 @@ export default function App() {
   function changeLink(value: string) {
     setLink(value);
     clearPreview();
-    setJustQueued(false);
   }
 
   function pasteLink(event: ClipboardEvent<HTMLInputElement>) {
@@ -229,7 +219,6 @@ export default function App() {
     setLink("");
     clearPreview();
     setFormError("");
-    setJustQueued(false);
   }
 
   async function chooseVideo() {
@@ -322,7 +311,6 @@ export default function App() {
         ...settings,
       });
       rememberFolder(folder);
-      setJustQueued(true);
     } catch (error) {
       setFolderStatus("error");
       setFolderError("保存目录不可用，请重新选择。");
@@ -348,7 +336,6 @@ export default function App() {
             onSave={(next) => {
               setSettings(next);
               setFormError("");
-              setJustQueued(false);
             }}
           />
         </div>
@@ -450,7 +437,7 @@ export default function App() {
                           disabled={!desktop}
                           aria-invalid={Boolean(link && sourceError)}
                           aria-describedby={
-                            link && sourceError ? "source-error" : "source-hint"
+                            link && sourceError ? "source-error" : undefined
                           }
                           onBlur={() => previewLink(link)}
                           onPaste={pasteLink}
@@ -485,11 +472,6 @@ export default function App() {
                     <Icon name="arrow" />
                   </button>
                 )}
-                <p id="source-hint" className="source-hint">
-                  {sourceMode === "link"
-                    ? "解析用于确认标题和分 P；完成后，点击「生成文稿」即可。"
-                    : "选择文件后会显示视频名称，确认后即可生成文稿。"}
-                </p>
               </div>
               {previewing && (
                 <div
@@ -657,13 +639,9 @@ export default function App() {
                   id="custom-instructions"
                   rows={4}
                   value={instructions}
-                  aria-describedby="instructions-hint"
                   placeholder="例如：按主题分节，保留关键术语，并在末尾列出复习问题。"
                   onChange={(event) => setInstructions(event.target.value)}
                 />
-                <p id="instructions-hint" className="field-hint">
-                  直接填写即可，也可以导入 Markdown 文件一起补充。
-                </p>
                 <div className="prompt-import">
                   <button
                     type="button"
@@ -699,17 +677,19 @@ export default function App() {
                   {formError}
                 </p>
               )}
-              <div className="readiness" data-ready={canGenerate || justQueued}>
-                <Icon name={canGenerate || justQueued ? "check" : "warning"} />
-                <p id="next-step" role="status">
-                  {desktop ? nextStep : "桌面应用提供完整的视频处理能力。"}
-                </p>
-              </div>
+              {nextStep && (
+                <div className="readiness">
+                  <Icon name="warning" />
+                  <p id="next-step" role="status">
+                    {nextStep}
+                  </p>
+                </div>
+              )}
               <button
                 type="button"
                 className="primary generate"
                 disabled={!canGenerate}
-                aria-describedby="next-step"
+                aria-describedby={nextStep ? "next-step" : undefined}
                 onClick={() => void generate()}
               >
                 <span>{queueing ? "正在准备…" : "生成文稿"}</span>
