@@ -51,9 +51,29 @@ import "./App.css";
 type SourceMode = "link" | "local";
 type FolderStatus = "unselected" | "checking" | "ready" | "error";
 
-const queue = new TaskQueue();
 const desktop = isTauri();
 const FOLDER_STORAGE_KEY = "lectavia.output-directory";
+const CONCURRENCY_STORAGE_KEY = "lectavia.max-concurrency";
+const queue = new TaskQueue(rememberedMaxConcurrency());
+
+function rememberedMaxConcurrency(): number | null {
+  try {
+    const limit = Number(localStorage.getItem(CONCURRENCY_STORAGE_KEY));
+    if (Number.isSafeInteger(limit) && limit >= 1) return limit;
+  } catch {
+    // An unavailable setting leaves concurrency unlimited.
+  }
+  return null;
+}
+
+function saveMaxConcurrency(limit: number | null): void {
+  if (limit === null) {
+    localStorage.removeItem(CONCURRENCY_STORAGE_KEY);
+  } else {
+    localStorage.setItem(CONCURRENCY_STORAGE_KEY, String(limit));
+  }
+  queue.setMaxConcurrency(limit);
+}
 
 function rememberedFolder(): string {
   try {
@@ -552,6 +572,8 @@ export default function App({
       {settingsOpen && (
         <SettingsPage
           modelsConfigured={settings !== null}
+          initialMaxConcurrency={queue.maxConcurrency}
+          onSaveMaxConcurrency={saveMaxConcurrency}
           onOpenModels={() => modelSettings.current?.open()}
           onOpenPresets={() => presetSettings.current?.open()}
         />

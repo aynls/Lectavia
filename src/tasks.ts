@@ -65,8 +65,6 @@ export interface Task {
   readonly parts: readonly TaskPart[];
   readonly outputs: readonly string[];
   readonly outputDirectory?: string;
-  readonly error?: Message;
-  readonly failurePhase?: Phase;
   readonly recovery: readonly TaskRecovery[];
 }
 
@@ -82,6 +80,12 @@ interface Job {
   parts: QueuedPart[];
   instructions?: string;
   multipartDirectory?: string;
+  preparingDirectory?: Promise<string>;
+}
+
+interface PendingPart {
+  job: Job;
+  index: number;
 }
 
 const modelSettingErrors = new Set<MessageKey>([
@@ -139,6 +143,13 @@ function failureMessage(error: unknown, job: Job): Message {
   ]);
 }
 
+function taskStatus(parts: readonly TaskPart[], completed: number): TaskStatus {
+  if (parts.some((part) => part.status === "running")) return "running";
+  if (parts.some((part) => part.status === "queued")) return "queued";
+  if (completed === parts.length) return "completed";
+  return completed > 0 ? "partial" : "failed";
+}
+
 export function revealOutput(
   path: string,
   isDirectory: boolean,
@@ -148,10 +159,24 @@ export function revealOutput(
 
 export class TaskQueue {
   #jobs = new Map<string, Job>();
-  #pending: Job[] = [];
-  #running = false;
+  #pending: PendingPart[] = [];
+  #active = 0;
+  #maxConcurrency: number | null;
   #listeners = new Set<() => void>();
   #snapshot: readonly Task[] = [];
+
+  constructor(maxConcurrency: number | null = null) {
+    this.#maxConcurrency = maxConcurrency;
+  }
+
+  get maxConcurrency(): number | null {
+    return this.#maxConcurrency;
+  }
+
+  setMaxConcurrency(limit: number | null): void {
+    this.#maxConcurrency = limit;
+    this.drain();
+  }
 
   getSnapshot = (): readonly Task[] => this.#snapshot;
 
@@ -214,9 +239,7 @@ export class TaskQueue {
       instructions: instructions || undefined,
     };
     this.#jobs.set(task.id, job);
-    this.#pending.push(job);
-    this.publish();
-    void this.drain();
+    this.schedule(job);
   }
 
   retry(taskId: string, updates: TaskRetryUpdates = {}): boolean {
@@ -233,6 +256,7 @@ export class TaskQueue {
     if (updates.outputDirectory !== undefined) {
       job.multipartDirectory = undefined;
     }
+    job.preparingDirectory = undefined;
     // Finished stages remain reusable. Only stages that run again use the new connections.
     job.request = {
       ...job.request,
@@ -240,30 +264,31 @@ export class TaskQueue {
       llm: updates.llm ? { ...updates.llm } : job.request.llm,
       outputDirectory: updates.outputDirectory ?? job.request.outputDirectory,
     };
-    this.#pending.push(job);
-    this.update(job, {
+    job.task = {
+      ...job.task,
       status: "queued",
-      error: undefined,
-      failurePhase: undefined,
       recovery: [],
       parts: job.task.parts.map((part) =>
         part.status === "failed"
           ? { ...part, status: "queued", phase: undefined, error: undefined }
           : part,
       ),
-    });
-    void this.drain();
+    };
+    this.schedule(job);
     return true;
+  }
+
+  private schedule(job: Job): void {
+    for (const [index, part] of job.task.parts.entries()) {
+      if (part.status === "queued") this.#pending.push({ job, index });
+    }
+    this.publish();
+    this.drain();
   }
 
   private publish(): void {
     this.#snapshot = Array.from(this.#jobs.values(), ({ task }) => task);
     this.#listeners.forEach((listener) => listener());
-  }
-
-  private update(job: Job, changes: Partial<Task>): void {
-    job.task = { ...job.task, ...changes };
-    this.publish();
   }
 
   private updatePart(
@@ -284,81 +309,58 @@ export class TaskQueue {
         ),
       ),
     );
-    this.update(job, {
-      parts,
-      outputs,
-      outputDirectory:
-        outputDirectories.length === 1 ? outputDirectories[0] : undefined,
-    });
-  }
-
-  private async drain(): Promise<void> {
-    if (this.#running) return;
-    this.#running = true;
-
-    try {
-      let job: Job | undefined;
-      while ((job = this.#pending.shift())) {
-        await this.runJob(job);
-      }
-    } finally {
-      this.#running = false;
-    }
-  }
-
-  private async runJob(job: Job): Promise<void> {
-    this.update(job, { status: "running" });
-
-    const { media, outputDirectory } = job.request;
-    if (media.multipart && !job.multipartDirectory) {
-      try {
-        job.multipartDirectory = await invoke<string>(
-          "create_output_directory",
-          {
-            directory: outputDirectory,
-            title: job.task.title,
-            fallbackTitle: translator(job.request.locale)(
-              "output.fallbackTitle",
-            ),
-          },
-        );
-      } catch (error) {
-        const failure = failureMessage(error, job);
-        const action = recoveryFor(failure, "output");
-        this.update(job, {
-          status: job.task.outputs.length > 0 ? "partial" : "failed",
-          error: failure,
-          failurePhase: "output",
-          recovery: action ? [action] : [],
-          parts: job.task.parts.map((part) =>
-            part.status === "queued"
-              ? { ...part, status: "failed", phase: "output" }
-              : part,
-          ),
-        });
-        return;
-      }
-    }
-
-    for (const [index, part] of job.task.parts.entries()) {
-      if (part.status === "queued") await this.runPart(job, index);
-    }
-
-    const { parts, outputs } = job.task;
+    const status = taskStatus(parts, outputs.length);
     const recovery = new Set<TaskRecovery>();
-    for (const part of parts) {
-      if (part.status === "failed" && part.error) {
+    if (status === "failed" || status === "partial") {
+      for (const part of parts) {
+        if (part.status !== "failed" || !part.error) continue;
         const action = recoveryFor(part.error, part.phase);
         if (action) recovery.add(action);
       }
     }
-    const status =
-      outputs.length === parts.length
-        ? "completed"
-        : outputs.length > 0
-          ? "partial"
-          : "failed";
-    this.update(job, { status, recovery: Array.from(recovery) });
+    job.task = {
+      ...job.task,
+      status,
+      parts,
+      outputs,
+      outputDirectory:
+        outputDirectories.length === 1 ? outputDirectories[0] : undefined,
+      recovery: Array.from(recovery),
+    };
+    this.publish();
+  }
+
+  private drain(): void {
+    while (this.#active < (this.#maxConcurrency ?? Infinity)) {
+      const pending = this.#pending.shift();
+      if (!pending) return;
+      this.#active += 1;
+      void this.runScheduledPart(pending);
+    }
+  }
+
+  private async runScheduledPart({ job, index }: PendingPart): Promise<void> {
+    try {
+      await this.runPart(job, index);
+    } finally {
+      this.#active -= 1;
+      this.drain();
+    }
+  }
+
+  private prepareMultipartDirectory(job: Job): Promise<string> {
+    // All selected parts write to the same directory, including on retry.
+    return (job.preparingDirectory ??= invoke<string>(
+      "create_output_directory",
+      {
+        directory: job.request.outputDirectory,
+        title: job.task.title,
+        fallbackTitle: translator(job.request.locale)("output.fallbackTitle"),
+      },
+    ).then((directory) => {
+      job.multipartDirectory = directory;
+      return directory;
+    }));
   }
 
   private async runPart(job: Job, index: number): Promise<void> {
@@ -370,10 +372,18 @@ export class TaskQueue {
       (part.media.number
         ? t("media.part", { number: part.media.number })
         : job.task.title);
-    const setPhase = (phase: Phase) =>
+    let phase: Phase = "output";
+    const setPhase = (next: Phase) => {
+      phase = next;
       this.updatePart(job, index, { status: "running", phase });
+    };
 
     try {
+      let directory = job.multipartDirectory;
+      if (media.multipart && !directory) {
+        this.updatePart(job, index, { status: "running" });
+        directory = await this.prepareMultipartDirectory(job);
+      }
       if (part.material === undefined) {
         if (part.transcript === undefined) {
           setPhase("audio");
@@ -401,7 +411,7 @@ export class TaskQueue {
 
       setPhase("output");
       const outputPath = await invoke<string>("write_output", {
-        directory: job.multipartDirectory ?? outputDirectory,
+        directory: directory ?? outputDirectory,
         title: media.multipart ? partTitle : job.task.title,
         labels: {
           fallbackTitle: t("output.fallbackTitle"),
@@ -416,11 +426,12 @@ export class TaskQueue {
         status: "completed",
         phase: undefined,
         outputPath,
-        outputDirectory: job.multipartDirectory,
+        outputDirectory: directory,
       });
     } catch (error) {
       this.updatePart(job, index, {
         status: "failed",
+        phase,
         error: failureMessage(error, job),
       });
     }

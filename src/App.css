@@ -1162,6 +1162,23 @@ button.settings-row .icon {
   font-weight: 400;
 }
 
+.settings-concurrency-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.settings-concurrency-controls input {
+  width: 7rem;
+}
+
+.settings-concurrency-controls input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+#max-concurrency-feedback {
+  flex-basis: 100%;
+}
+
 .settings-header {
   display: flex;
   align-items: start;

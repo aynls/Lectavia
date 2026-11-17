@@ -20,6 +20,16 @@ export default {
   "workspace.need.folder": "利用可能な保存フォルダーを選択",
   "settings.title": "設定",
   "settings.backToWorkspace": "ワークスペースに戻る",
+  "settings.maxConcurrency": "最大同時実行数",
+  "settings.concurrencyHint":
+    "空欄の場合は無制限です。動画の各パートを1件として数えます。",
+  "settings.unlimitedConcurrency": "無制限",
+  "settings.invalidConcurrency":
+    "1以上の整数を入力するか、空欄にしてください。",
+  "settings.save": "保存",
+  "settings.savedConcurrency": "最大同時実行数を保存しました。",
+  "settings.saveConcurrencyFailed":
+    "この端末に最大同時実行数を保存できませんでした。",
   "media.choose": "動画を選択",
   "media.source": "動画の参照元",
   "media.linkTab": "リンクを貼り付け",
@@ -105,7 +115,7 @@ export default {
   "task.phase.organization": "原稿を整理",
   "task.phase.output": "ファイルを保存",
   "task.phaseError": "{{phase}}でエラーが発生しました。{{detail}}",
-  "task.partProgress": "{{current}} / {{total}} 件目 · {{phase}}",
+  "task.runningParts": "{{count}} 件を処理中",
   "task.saved": "保存済み {{saved}} / {{total}} 件",
   "task.savedWithFailures":
     "保存済み {{saved}} / {{total}} 件 · 失敗 {{failed}} 件",

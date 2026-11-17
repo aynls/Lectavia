@@ -20,6 +20,16 @@ export default {
   "workspace.need.folder": "choose an available output folder",
   "settings.title": "Settings",
   "settings.backToWorkspace": "Back to workspace",
+  "settings.maxConcurrency": "Maximum concurrency",
+  "settings.concurrencyHint":
+    "Leave blank for no limit. Each video part counts as one job.",
+  "settings.unlimitedConcurrency": "Unlimited",
+  "settings.invalidConcurrency":
+    "Enter a positive whole number or leave this blank.",
+  "settings.save": "Save",
+  "settings.savedConcurrency": "Concurrency limit saved.",
+  "settings.saveConcurrencyFailed":
+    "Could not save the concurrency limit on this device.",
   "media.choose": "Choose a video",
   "media.source": "Video source",
   "media.linkTab": "Paste link",
@@ -104,7 +114,7 @@ export default {
   "task.phase.organization": "Organizing document",
   "task.phase.output": "Saving file",
   "task.phaseError": "{{phase}} failed. {{detail}}",
-  "task.partProgress": "Item {{current}} of {{total}} · {{phase}}",
+  "task.runningParts": "{{count}} in progress",
   "task.saved": "Saved {{saved}} of {{total}}",
   "task.savedWithFailures": "Saved {{saved}} of {{total}} · {{failed}} failed",
   "task.opening": "Opening…",

@@ -8,6 +8,7 @@ import { partLabel } from "./media";
 import {
   revealOutput,
   type Task,
+  type TaskPart,
   type TaskQueue,
   type TaskRecovery,
 } from "./tasks";
@@ -135,11 +136,10 @@ function TaskCard({
         t,
       )
     : undefined;
-  const runningIndex = task.parts.findIndex(
+  const runningParts = task.parts.filter(
     (part) => part.status === "running",
-  );
-  const running = task.parts[runningIndex];
-  const phase = running?.phase;
+  ).length;
+  const phase = singlePart?.status === "running" ? singlePart.phase : undefined;
   const stage = phases.findIndex((step) => step === phase);
   const status = t(`task.status.${task.status}`);
   const failures = task.parts.filter((part) => part.status === "failed").length;
@@ -165,7 +165,7 @@ function TaskCard({
     }
   }
 
-  function describeFailure(error: Message, phase?: Task["failurePhase"]) {
+  function describeFailure(error: Message, phase?: TaskPart["phase"]) {
     const detail = renderMessage(t, error);
     return phase
       ? t("task.phaseError", { phase: t(`task.phase.${phase}`), detail })
@@ -238,16 +238,7 @@ function TaskCard({
       {phase && (
         <div className="task-progress">
           <p className="muted" role="status">
-            {multipart
-              ? t("task.partProgress", {
-                  current: runningIndex + 1,
-                  total: task.parts.length,
-                  phase: partLabel(
-                    { title: t(`task.phase.${phase}`), number: running.number },
-                    t,
-                  ),
-                })
-              : t(`task.phase.${phase}`)}
+            {t(`task.phase.${phase}`)}
           </p>
           <div className="phase-track" aria-hidden="true">
             {phases.map((phase, index) => (
@@ -265,20 +256,19 @@ function TaskCard({
           </div>
         </div>
       )}
-      {task.error && (
-        <p className="error task-error">
-          {describeFailure(task.error, task.failurePhase)}
-        </p>
-      )}
       {multipart ? (
         <details className="task-details">
           <summary>
             <Icon name="down" />
-            {t(failures > 0 ? "task.savedWithFailures" : "task.saved", {
-              saved: task.outputs.length,
-              total: task.parts.length,
-              failed: failures,
-            })}
+            <span>
+              {t(failures > 0 ? "task.savedWithFailures" : "task.saved", {
+                saved: task.outputs.length,
+                total: task.parts.length,
+                failed: failures,
+              })}
+              {runningParts > 0 &&
+                ` · ${t("task.runningParts", { count: runningParts })}`}
+            </span>
           </summary>
           <ul className="task-parts">
             {task.parts.map((part, index) => {
