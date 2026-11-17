@@ -15,15 +15,10 @@ import {
   type ModelSettingsValue,
 } from "./ModelSettings";
 import { TaskList } from "./TaskList";
-import { TaskQueue } from "./tasks";
+import { TaskQueue, type PromptFile } from "./tasks";
 import { parseVideoLink, type VideoSource } from "./video-source";
 import logoUrl from "../design/lectavia-logo.svg";
 import "./App.css";
-
-interface PromptFile {
-  name: string;
-  content: string;
-}
 
 type SourceMode = "link" | "local";
 type FolderStatus = "checking" | "ready" | "error";
@@ -295,19 +290,14 @@ export default function App() {
     setQueueing(true);
     try {
       await invoke("validate_output_directory", { directory: folder });
-      const customInstructions = [
-        instructions.trim(),
-        prompt?.content.trim() ?? "",
-      ]
-        .filter(Boolean)
-        .join("\n\n");
-
       queue.enqueue({
+        link,
         media,
-        parts: media.parts.filter((part) => selected.has(part.id)),
+        selectedParts,
         outputDirectory: folder,
         format,
-        instructions: customInstructions || undefined,
+        instructions,
+        prompt,
         ...settings,
       });
       rememberFolder(folder);

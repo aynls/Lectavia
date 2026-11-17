@@ -16,12 +16,19 @@ type PartStatus = "queued" | "running" | "completed" | "failed";
 type TaskStatus = PartStatus | "partial";
 type Phase = "audio" | "transcription" | "organization" | "output";
 
+export interface PromptFile {
+  name: string;
+  content: string;
+}
+
 export interface TaskRequest {
+  link: string;
   media: MediaInfo;
-  parts: MediaPart[];
+  selectedParts: string[];
   outputDirectory: string;
   format: OutputFormat;
-  instructions?: string;
+  instructions: string;
+  prompt: PromptFile | null;
   asr: ModelConnection;
   llm: ModelConnection;
 }
@@ -54,13 +61,9 @@ interface QueuedPart {
 
 interface Job {
   task: Task;
+  request: TaskRequest;
   parts: QueuedPart[];
-  multipart: boolean;
-  outputDirectory: string;
-  format: OutputFormat;
   instructions?: string;
-  asr: ModelConnection;
-  llm: ModelConnection;
 }
 
 function failureMessage(error: unknown, job: Job): string {
@@ -71,7 +74,7 @@ function failureMessage(error: unknown, job: Job): string {
         ? error.message
         : "任务处理失败。";
 
-  return [job.asr.apiKey, job.llm.apiKey].reduce(
+  return [job.request.asr.apiKey, job.request.llm.apiKey].reduce(
     (detail, key) => (key ? detail.replaceAll(key, "[已隐藏]") : detail),
     message,
   );
@@ -98,8 +101,9 @@ export class TaskQueue {
     return () => this.#listeners.delete(listener);
   };
 
-  enqueue(request: TaskRequest): void {
-    const selected = new Set(request.parts.map((part) => part.id));
+  enqueue(input: TaskRequest): void {
+    const request = structuredClone(input);
+    const selected = new Set(request.selectedParts);
     const parts = request.media.parts.flatMap((part, index) => {
       if (!selected.has(part.id)) return [];
 
@@ -110,7 +114,6 @@ export class TaskQueue {
             number: request.media.multipart
               ? (part.number ?? index + 1)
               : undefined,
-            source: { ...part.source },
           },
         },
       ];
@@ -132,15 +135,18 @@ export class TaskQueue {
       outputs: [],
     };
 
+    const instructions = [
+      request.instructions.trim(),
+      request.prompt?.content.trim() ?? "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
     const job: Job = {
       task,
+      request,
       parts,
-      multipart: request.media.multipart,
-      outputDirectory: request.outputDirectory,
-      format: request.format,
-      instructions: request.instructions,
-      asr: { ...request.asr },
-      llm: { ...request.llm },
+      instructions: instructions || undefined,
     };
     this.#jobs.set(task.id, job);
     this.#pending.push(job);
@@ -211,16 +217,14 @@ export class TaskQueue {
   private async runJob(job: Job): Promise<void> {
     this.update(job, { status: "running" });
 
-    if (job.multipart && !job.task.outputDirectory) {
+    const { media, outputDirectory } = job.request;
+    if (media.multipart && !job.task.outputDirectory) {
       try {
-        const outputDirectory = await invoke<string>(
-          "create_output_directory",
-          {
-            directory: job.outputDirectory,
-            title: job.task.title,
-          },
-        );
-        this.update(job, { outputDirectory });
+        const directory = await invoke<string>("create_output_directory", {
+          directory: outputDirectory,
+          title: job.task.title,
+        });
+        this.update(job, { outputDirectory: directory });
       } catch (error) {
         this.update(job, {
           status: "failed",
@@ -246,6 +250,7 @@ export class TaskQueue {
   }
 
   private async runPart(job: Job, index: number): Promise<void> {
+    const { asr, llm, format, outputDirectory, media } = job.request;
     const part = job.parts[index];
     const setPhase = (phase: Phase) =>
       this.updatePart(job, index, { status: "running", phase });
@@ -258,7 +263,7 @@ export class TaskQueue {
 
           try {
             setPhase("transcription");
-            part.transcript = await transcribeAudio(audio.files, job.asr);
+            part.transcript = await transcribeAudio(audio.files, asr);
           } finally {
             // Cleanup errors never replace the result of transcription.
             await removeAudio(audio).catch(() => undefined);
@@ -267,9 +272,9 @@ export class TaskQueue {
 
         setPhase("organization");
         part.material = await organizeTranscript(part.transcript, {
-          connection: job.llm,
+          connection: llm,
           title: part.media.title || job.task.title,
-          format: job.format,
+          format,
           instructions: job.instructions,
         });
         part.transcript = undefined;
@@ -277,9 +282,9 @@ export class TaskQueue {
 
       setPhase("output");
       const outputPath = await invoke<string>("write_output", {
-        directory: job.task.outputDirectory ?? job.outputDirectory,
-        title: job.multipart ? part.media.title : job.task.title,
-        format: job.format,
+        directory: job.task.outputDirectory ?? outputDirectory,
+        title: media.multipart ? part.media.title : job.task.title,
+        format,
         content: part.material,
         partIndex: part.media.number,
       });
