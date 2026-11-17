@@ -102,7 +102,6 @@ export default function App({
   const [instructionsError, setInstructionsError] = useState<Message>();
   const [settings, setSettings] = useState(initialSettings);
   const [queueing, setQueueing] = useState(false);
-  const [queuedTask, setQueuedTask] = useState<{ id: string; title: string }>();
   const composer = useRef<HTMLElement>(null);
   const modelSettings = useRef<ModelSettingsHandle>(null);
   const restoreDialog = useRef<HTMLDialogElement>(null);
@@ -205,7 +204,6 @@ export default function App({
     setMedia(null);
     setSelectedParts([]);
     setSourceError(undefined);
-    setQueuedTask(undefined);
   }
 
   async function preview(source: VideoSource) {
@@ -519,11 +517,10 @@ export default function App({
     const revision = workspaceRevision.current;
     setFormError(undefined);
     setFolderError(undefined);
-    setQueuedTask(undefined);
     setQueueing(true);
     try {
       await invoke("validate_output_directory", { directory: folder });
-      const taskId = queue.enqueue({
+      queue.enqueue({
         link,
         media,
         selectedParts,
@@ -534,7 +531,6 @@ export default function App({
         prompt,
         ...settings,
       });
-      setQueuedTask({ id: taskId, title: media.title });
       if (revision === workspaceRevision.current) rememberFolder(folder);
     } catch (error) {
       if (revision !== workspaceRevision.current) return;
@@ -1012,24 +1008,6 @@ export default function App({
                 </span>
                 <Icon name="arrow" />
               </button>
-              <div className={queuedTask ? "queue-receipt" : "sr-only"}>
-                <p role="status" title={queuedTask?.title}>
-                  {queuedTask
-                    ? t("workspace.queued", { title: queuedTask.title })
-                    : null}
-                </p>
-                {queuedTask && (
-                  <button
-                    type="button"
-                    className="quiet readiness-action"
-                    onClick={() =>
-                      document.getElementById(`task-${queuedTask.id}`)?.focus()
-                    }
-                  >
-                    {t("workspace.viewTask")}
-                  </button>
-                )}
-              </div>
             </section>
           </section>
           <TaskList

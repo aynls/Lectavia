@@ -7,8 +7,6 @@ export default {
   "common.removeFile": "移除 {{name}}",
   "workspace.desktopRequired": "请在 Lectavia 桌面应用中处理视频。",
   "workspace.label": "创建文稿任务",
-  "workspace.queued": "已加入队列 · {{title}}",
-  "workspace.viewTask": "查看任务",
   "workspace.next": "请先{{steps}}。",
   "workspace.need.checkLink": "检查视频链接",
   "workspace.need.reselectFile": "重新选择视频文件",

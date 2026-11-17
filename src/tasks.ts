@@ -165,7 +165,7 @@ export class TaskQueue {
     return job && structuredClone(job.request);
   }
 
-  enqueue(input: TaskRequest): string {
+  enqueue(input: TaskRequest): void {
     const request = structuredClone(input);
     const selected = new Set(request.selectedParts);
     const parts = request.media.parts.flatMap((part, index) => {
@@ -217,7 +217,6 @@ export class TaskQueue {
     this.#pending.push(job);
     this.publish();
     void this.drain();
-    return task.id;
   }
 
   retry(taskId: string, updates: TaskRetryUpdates = {}): boolean {

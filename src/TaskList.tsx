@@ -217,7 +217,7 @@ function TaskCard({
   return (
     <li className="task enter">
       <div className="task-heading">
-        <h3 ref={title} id={`task-${task.id}`} tabIndex={-1}>
+        <h3 ref={title} tabIndex={-1}>
           {task.title}
           {singlePartLabel && (
             <span className="task-part-subtitle">{singlePartLabel}</span>
