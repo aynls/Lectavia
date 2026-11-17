@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="logo-title">
+  <title id="logo-title">Lectavia · 字幕窗口</title>
+  <path d="M10 23h101v75H10Z" fill="#26241e"/>
+  <path d="M16 29h89v38H16Z" fill="#f3c945"/>
+  <path d="M21 67h14l23-23h17L52 67h7l23-23h15L74 67h31v6H16Z" fill="#26241e"/>
+  <path d="M30 80h25v6H30zm31 0h29v6H61z" fill="#fff5d5"/>
+  <path d="M17 98h101v7H17zm94-68h7v68h-7z" fill="#a1601f"/>
+</svg>
