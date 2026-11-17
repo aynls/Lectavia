@@ -264,12 +264,16 @@ function splitTranscript(transcript: string): string[] {
 
 function organizationPrompt(options: OrganizationOptions): string {
   const t = translator(options.locale);
+  const format = t(
+    options.format === "md" ? "prompt.markdown" : "prompt.plainText",
+  );
   const prompt = [
-    t("prompt.intro"),
+    [t("prompt.intro"), format].join(options.locale === "en" ? " " : ""),
     t("prompt.fidelity"),
-    t("prompt.untrusted"),
-    t("prompt.bodyOnly"),
-    t(options.format === "md" ? "prompt.markdown" : "prompt.plainText"),
+    [t("prompt.untrusted"), t("prompt.bodyOnly")].join(
+      options.locale === "en" ? " " : "",
+    ),
+    t("prompt.priority"),
   ];
 
   const instructions = options.instructions?.trim();
