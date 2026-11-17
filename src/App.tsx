@@ -17,6 +17,7 @@ import {
 import { TaskList } from "./TaskList";
 import { TaskQueue } from "./tasks";
 import { parseVideoLink, type VideoSource } from "./video-source";
+import logoUrl from "../design/lectavia-logo.svg";
 import "./App.css";
 
 interface PromptFile {
@@ -337,8 +338,8 @@ export default function App() {
       <header className="top-bar">
         <div className="app-width app-header">
           <div className="brand">
-            <span className="brand-mark">
-              <Icon name="waveform" />
+            <span className="brand-mark" aria-hidden="true">
+              <img src={logoUrl} alt="" />
             </span>
             Lectavia
           </div>
@@ -358,21 +359,33 @@ export default function App() {
           <p className="notice">请在 Lectavia 桌面应用中处理视频。</p>
         )}
         <div className="workspace-title">
-          <div>
-            <h1 id="workspace-title">视频转文稿</h1>
-            <p>转写并整理视频内容，保存为可编辑的 Markdown 或纯文本。</p>
-          </div>
-          <div className="signal-script" aria-hidden="true">
-            <div className="signal-bars">
-              {Array.from({ length: 9 }, (_, index) => (
-                <span key={index} />
-              ))}
+          <h1 id="workspace-title" className="sr-only">
+            视频转文稿
+          </h1>
+          <div className="workspace-art" aria-hidden="true">
+            <div className="art-window">
+              <div className="art-screen">
+                <span />
+                <span />
+                <span />
+              </div>
+              <div className="art-captions">
+                <span />
+                <span />
+              </div>
             </div>
-            <Icon name="arrow" />
-            <div className="script-lines">
-              <span />
-              <span />
-              <span />
+            <div className="signal-script">
+              <div className="signal-bars">
+                {Array.from({ length: 9 }, (_, index) => (
+                  <span key={index} />
+                ))}
+              </div>
+              <Icon name="arrow" />
+              <div className="script-lines">
+                <span />
+                <span />
+                <span />
+              </div>
             </div>
           </div>
         </div>
