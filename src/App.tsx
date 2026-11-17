@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
   type ClipboardEvent,
+  type KeyboardEvent,
   type SubmitEvent,
 } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
@@ -71,6 +72,7 @@ export default function App({
   const { t } = useTranslation();
   const locale = currentLocale();
   const [sourceMode, setSourceMode] = useState<SourceMode>("link");
+  const [focusedSourceTab, setFocusedSourceTab] = useState<SourceMode>();
   const [link, setLink] = useState("");
   const [media, setMedia] = useState<MediaInfo | null>(null);
   const [selectedParts, setSelectedParts] = useState<string[]>([]);
@@ -259,6 +261,28 @@ export default function App({
     setLink("");
     clearPreview();
     setFormError(undefined);
+  }
+
+  function navigateSourceTabs(event: KeyboardEvent<HTMLDivElement>) {
+    const tabs = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+    );
+    const current = tabs.findIndex((tab) => tab === event.target);
+    if (current < 0) return;
+
+    const previous = (current + tabs.length - 1) % tabs.length;
+    const next = (current + 1) % tabs.length;
+    const keyTargets: Record<string, number> = {
+      ArrowLeft: previous,
+      ArrowRight: next,
+      Home: 0,
+      End: tabs.length - 1,
+    };
+    const target = tabs[keyTargets[event.key]];
+    if (!target) return;
+
+    event.preventDefault();
+    target.focus();
   }
 
   async function chooseVideo() {
@@ -529,6 +553,12 @@ export default function App({
                     className="source-tabs"
                     role="tablist"
                     aria-label={t("media.source")}
+                    onKeyDown={navigateSourceTabs}
+                    onBlur={(event) => {
+                      if (!event.currentTarget.contains(event.relatedTarget)) {
+                        setFocusedSourceTab(undefined);
+                      }
+                    }}
                   >
                     <button
                       id="link-tab"
@@ -536,7 +566,11 @@ export default function App({
                       role="tab"
                       aria-selected={sourceMode === "link"}
                       aria-controls="source-panel"
+                      tabIndex={
+                        (focusedSourceTab ?? sourceMode) === "link" ? 0 : -1
+                      }
                       data-active={sourceMode === "link"}
+                      onFocus={() => setFocusedSourceTab("link")}
                       onClick={() => switchSource("link")}
                     >
                       <Icon name="link" />
@@ -548,7 +582,11 @@ export default function App({
                       role="tab"
                       aria-selected={sourceMode === "local"}
                       aria-controls="source-panel"
+                      tabIndex={
+                        (focusedSourceTab ?? sourceMode) === "local" ? 0 : -1
+                      }
                       data-active={sourceMode === "local"}
+                      onFocus={() => setFocusedSourceTab("local")}
                       onClick={() => switchSource("local")}
                     >
                       <Icon name="video" />

@@ -130,6 +130,7 @@
 
 .tasks:focus-visible {
   background: var(--surface);
+  outline-offset: -3px;
 }
 
 .task {
@@ -182,7 +183,12 @@
   color: var(--success);
 }
 
-.task-status:is([data-status="failed"], [data-status="partial"]) {
+.task-status[data-status="partial"] {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.task-status[data-status="failed"] {
   background: var(--danger-soft);
   color: var(--danger);
 }
@@ -214,7 +220,7 @@
 }
 
 .phase-track [data-stage="current"] {
-  background: var(--accent);
+  background: var(--accent-text);
 }
 
 .task-details summary {

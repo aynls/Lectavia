@@ -22,6 +22,8 @@
   --accent-ink: #26241e;
   --success: #337054;
   --success-soft: #e2eee6;
+  --warning: #80511b;
+  --warning-soft: #f7e9c8;
   --danger: #9d3535;
   --danger-soft: #f6e4e4;
   --disabled: #e1ddcf;
@@ -51,6 +53,8 @@
     --accent-ink: #26241e;
     --success: #91c7a7;
     --success-soft: #21362a;
+    --warning: #efbc7f;
+    --warning-soft: #422e1a;
     --danger: #efa5a5;
     --danger-soft: #412626;
     --disabled: #3b382e;
@@ -505,8 +509,9 @@ button.primary:disabled {
   opacity: 1;
 }
 
-:focus {
-  outline: none;
+:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
 }
 
 .sr-only {
@@ -674,7 +679,7 @@ button.primary:disabled {
   align-items: center;
   gap: 0.3rem;
   margin-bottom: 0.25rem;
-  color: var(--accent-text);
+  color: var(--success);
   font-size: 0.72rem;
   font-weight: 700;
 }
@@ -981,7 +986,7 @@ legend {
   width: 1rem;
   height: 1rem;
   margin-top: 0.15rem;
-  color: var(--accent-text);
+  color: var(--warning);
 }
 
 .generate {
@@ -1132,13 +1137,13 @@ legend {
 }
 
 .settings-trigger[data-configured="false"] {
-  border-color: var(--accent-text);
+  border-color: var(--warning);
   background: var(--surface);
 }
 
 .settings-trigger[data-configured="false"] > .icon:last-child,
 .settings-trigger[data-configured="false"] > .icon:first-child {
-  color: var(--accent-text);
+  color: var(--warning);
 }
 
 .settings-trigger-copy {
