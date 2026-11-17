@@ -1,4 +1,5 @@
 import { useId, useRef, useState, type SubmitEvent } from "react";
+import { Icon } from "./Icon";
 import {
   OPENROUTER_ASR_MODEL,
   OPENROUTER_BASE_URL,
@@ -30,6 +31,11 @@ interface CatalogLookup {
   error?: string;
 }
 
+const purposeLabels: Record<ModelPurpose, string> = {
+  asr: "语音转写",
+  llm: "资料整理",
+};
+
 function ReasoningField({
   model,
   effort,
@@ -49,52 +55,61 @@ function ReasoningField({
     : "供应商默认";
 
   return (
-    <>
-      {efforts.length > 0 && (
-        <>
-          <label htmlFor={id}>思考强度</label>
-          <select
-            id={id}
-            name="reasoning-effort-choice"
-            value={useManualEffort ? "__manual__" : effort}
-            onChange={(event) => {
-              const value = event.target.value;
-              setManual(value === "__manual__");
-              if (value !== "__manual__") onChange(value);
-            }}
-          >
-            <option value="">{defaultLabel}</option>
-            {efforts.map((level) => (
-              <option key={level} value={level}>
-                {level}
-              </option>
-            ))}
-            <option value="__manual__">手动填写</option>
-          </select>
-        </>
-      )}
-      {(efforts.length === 0 || useManualEffort) && (
-        <>
-          <label htmlFor={id + "-custom"}>自定义思考强度</label>
-          <input
-            id={id + "-custom"}
-            name="reasoning-effort"
-            value={effort}
-            placeholder="留空时由供应商决定"
-            aria-describedby={efforts.length === 0 ? id + "-hint" : undefined}
-            spellCheck={false}
-            onChange={(event) => onChange(event.target.value)}
-          />
-          {efforts.length === 0 && (
-            <p id={id + "-hint"} className="muted settings-hint">
-              {model
-                ? "供应商未列出此模型的档位。"
-                : "获取模型列表后可自动检测支持的档位。"}
-            </p>
-          )}
-        </>
-      )}
-    </>
+    <details className="settings-advanced">
+      <summary>
+        <Icon name="down" />
+        思考强度
+        <small className="advanced-selection" title={effort}>
+          {effort || "供应商默认"}
+        </small>
+      </summary>
+      <div className="advanced-content">
+        {efforts.length > 0 && (
+          <>
+            <label htmlFor={id}>思考强度</label>
+            <select
+              id={id}
+              name="reasoning-effort-choice"
+              value={useManualEffort ? "__manual__" : effort}
+              onChange={(event) => {
+                const value = event.target.value;
+                setManual(value === "__manual__");
+                if (value !== "__manual__") onChange(value);
+              }}
+            >
+              <option value="">{defaultLabel}</option>
+              {efforts.map((level) => (
+                <option key={level} value={level}>
+                  {level}
+                </option>
+              ))}
+              <option value="__manual__">手动填写</option>
+            </select>
+          </>
+        )}
+        {(efforts.length === 0 || useManualEffort) && (
+          <>
+            <label htmlFor={id + "-custom"}>自定义思考强度</label>
+            <input
+              id={id + "-custom"}
+              name="reasoning-effort"
+              value={effort}
+              placeholder="留空时由供应商决定"
+              aria-describedby={efforts.length === 0 ? id + "-hint" : undefined}
+              spellCheck={false}
+              onChange={(event) => onChange(event.target.value)}
+            />
+            {efforts.length === 0 && (
+              <p id={id + "-hint"} className="muted settings-hint">
+                {model
+                  ? "供应商未列出此模型的档位。"
+                  : "获取模型列表后可自动检测支持的档位。"}
+              </p>
+            )}
+          </>
+        )}
+      </div>
+    </details>
   );
 }
 
@@ -162,7 +177,7 @@ function ProviderFields({
 
   return (
     <fieldset className="settings-fields">
-      <legend>{purpose === "asr" ? "语音转写" : "资料整理"}</legend>
+      <legend>{purposeLabels[purpose]}</legend>
       <label htmlFor={id + "-url"}>API 基础地址</label>
       <input
         id={id + "-url"}
@@ -183,18 +198,6 @@ function ProviderFields({
         required
         onChange={(event) => editEndpoint({ apiKey: event.target.value })}
       />
-      <div className="settings-catalog">
-        <button type="button" disabled={loading} onClick={fetchModels}>
-          {loading ? "正在获取…" : "获取模型列表"}
-        </button>
-        <p className={catalog?.error ? "error" : "muted"} role="status">
-          {catalog?.error ??
-            (catalog?.models &&
-              (models.length
-                ? `找到 ${models.length} 个模型`
-                : "供应商未返回模型，可以手动填写。"))}
-        </p>
-      </div>
       {models.length > 0 && (
         <>
           <label htmlFor={id + "-catalog"}>从列表选择模型</label>
@@ -225,11 +228,29 @@ function ProviderFields({
             name={id + "-model"}
             value={connection.model}
             required
+            placeholder="输入供应商提供的模型 ID"
             spellCheck={false}
             onChange={(event) => editModel(event.target.value)}
           />
         </>
       )}
+      <div className="settings-catalog">
+        <button
+          type="button"
+          className="quiet"
+          disabled={loading}
+          onClick={fetchModels}
+        >
+          {loading ? "正在获取…" : "获取模型列表"}
+        </button>
+        <p className={catalog?.error ? "error" : "muted"} role="status">
+          {catalog?.error ??
+            (catalog?.models &&
+              (models.length
+                ? `找到 ${models.length} 个模型`
+                : "供应商未返回模型，可以手动填写。"))}
+        </p>
+      </div>
       {purpose === "llm" && connection.model.trim() && (
         <ReasoningField
           key={connection.model.trim()}
@@ -268,33 +289,55 @@ export function ModelSettings({
   function saveSettings(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    try {
-      const { asr, llm } = draft;
-      validateModelConnection(asr);
-      validateModelConnection(llm);
-      onSave(draft);
-      modal.current?.close();
-    } catch (error) {
-      setError(String(error instanceof Error ? error.message : error));
+    for (const purpose of ["asr", "llm"] as const) {
+      try {
+        validateModelConnection(draft[purpose]);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setError(`${purposeLabels[purpose]}：${message}`);
+        return;
+      }
     }
+
+    onSave(draft);
+    modal.current?.close();
   }
 
   return (
     <>
       <button type="button" className="settings-trigger" onClick={openSettings}>
+        <Icon name="settings" />
         {configured ? "模型设置" : "配置模型"}
       </button>
       <dialog
         ref={modal}
         className="settings-dialog"
         aria-labelledby="settings-title"
+        aria-describedby="settings-description"
       >
-        <h2 id="settings-title">模型设置</h2>
-        <p className="muted">
-          分别配置两项 OpenAI 兼容服务。密钥仅保存在本次应用运行期间。
-        </p>
-        <form aria-labelledby="settings-title" onSubmit={saveSettings}>
-          <div className="settings-group" ref={firstField}>
+        <form
+          className="settings-form"
+          onSubmit={saveSettings}
+          onChange={() => setError("")}
+        >
+          <header className="settings-header">
+            <div>
+              <h2 id="settings-title">模型设置</h2>
+              <p id="settings-description" className="muted">
+                配置语音转写和资料整理的 OpenAI
+                兼容服务。密钥仅在本次运行期间保留。
+              </p>
+            </div>
+            <button
+              type="button"
+              className="quiet icon-button"
+              aria-label="关闭模型设置"
+              onClick={() => modal.current?.close()}
+            >
+              <Icon name="close" />
+            </button>
+          </header>
+          <div className="settings-body" ref={firstField}>
             <ProviderFields
               connection={draft.asr}
               setConnection={(asr) =>
@@ -310,18 +353,20 @@ export function ModelSettings({
               purpose="llm"
             />
           </div>
-          {error && (
-            <p className="error" role="alert">
-              {error}
-            </p>
-          )}
-          <div className="actions settings-actions">
-            <button type="button" onClick={() => modal.current?.close()}>
-              取消
-            </button>
-            <button type="submit" className="primary">
-              保存设置
-            </button>
+          <div className="settings-footer">
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+            <div className="actions settings-actions">
+              <button type="button" onClick={() => modal.current?.close()}>
+                取消
+              </button>
+              <button type="submit" className="primary">
+                保存设置
+              </button>
+            </div>
           </div>
         </form>
       </dialog>
