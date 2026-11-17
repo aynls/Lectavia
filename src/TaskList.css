@@ -161,6 +161,40 @@
   line-height: 1.45;
 }
 
+.task-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+button.queue-clear,
+button.task-close {
+  min-block-size: 2rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+button.task-close {
+  inline-size: 2rem;
+}
+
+button.queue-clear:is(:hover, :focus-visible),
+button.task-close:is(:hover, :focus-visible),
+button.queue-confirm {
+  background-color: var(--danger-soft);
+  color: var(--danger);
+}
+
+button.queue-confirm:is(:hover, :focus-visible) {
+  border-color: var(--danger);
+  background-color: var(--danger-soft);
+  color: var(--danger);
+}
+
+.confirmation-dialog .settings-header p {
+  overflow-wrap: anywhere;
+}
+
 .task-part-subtitle {
   display: block;
   margin-block-start: 0.2rem;

@@ -1,4 +1,10 @@
-import { useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { StackSimpleIcon } from "@phosphor-icons/react/dist/csr/StackSimple";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
@@ -6,6 +12,7 @@ import { Icon } from "./Icon";
 import { errorMessage, renderMessage, type Message } from "./i18n";
 import { partLabel } from "./media";
 import {
+  isUnfinished,
   revealOutput,
   type Task,
   type TaskPart,
@@ -15,6 +22,17 @@ import {
 import "./TaskList.css";
 
 const phases = ["audio", "transcription", "organization", "output"] as const;
+
+type Confirmation =
+  | { kind: "clear" }
+  | { kind: "close"; taskId: string; title: string }
+  | {
+      kind: "part";
+      taskId: string;
+      partId: string;
+      title: string;
+      focusId: string;
+    };
 
 interface TaskActions {
   onRestore: (taskId: string) => void;
@@ -117,9 +135,13 @@ function TaskCard({
   queue,
   onRestore,
   onRecover,
+  onClose,
+  onCancelPart,
 }: {
   task: Task;
   queue: TaskQueue;
+  onClose: (task: Task) => void;
+  onCancelPart: (confirmation: Extract<Confirmation, { kind: "part" }>) => void;
 } & TaskActions) {
   const { t } = useTranslation();
   const title = useRef<HTMLHeadingElement>(null);
@@ -143,7 +165,7 @@ function TaskCard({
   const stage = phases.findIndex((step) => step === phase);
   const status = t(`task.status.${task.status}`);
   const failures = task.parts.filter((part) => part.status === "failed").length;
-  const canRetry = task.status === "partial" || task.status === "failed";
+  const canRetry = failures > 0 && !isUnfinished(task.status);
   const modelRecovery = task.recovery.find(
     (action) => action !== "outputDirectory",
   );
@@ -222,17 +244,32 @@ function TaskCard({
             <span className="task-part-subtitle">{singlePartLabel}</span>
           )}
         </h3>
-        <span className="task-status" data-status={task.status} role="status">
-          <span className="sr-only">
-            {t("task.statusLabel", {
+        <div className="task-heading-actions">
+          <span className="task-status" data-status={task.status} role="status">
+            <span className="sr-only">
+              {t("task.statusLabel", {
+                title: singlePartLabel
+                  ? `${task.title} · ${singlePartLabel}`
+                  : task.title,
+                status,
+              })}
+            </span>
+            <span aria-hidden="true">{status}</span>
+          </span>
+          <button
+            type="button"
+            className="quiet icon-button task-close"
+            aria-label={t("task.closeNamed", {
               title: singlePartLabel
                 ? `${task.title} · ${singlePartLabel}`
                 : task.title,
-              status,
             })}
-          </span>
-          <span aria-hidden="true">{status}</span>
-        </span>
+            title={t("task.close")}
+            onClick={() => onClose(task)}
+          >
+            <Icon name="close" />
+          </button>
+        </div>
       </div>
       {phase && (
         <div className="task-progress">
@@ -272,6 +309,7 @@ function TaskCard({
           <ul className="task-parts">
             {task.parts.map((part, index) => {
               const partTitleId = `task-part-${task.id}-${index}`;
+              const label = partLabel(part, t);
               return (
                 <li className="task-part" key={part.id}>
                   <span
@@ -279,15 +317,36 @@ function TaskCard({
                     id={partTitleId}
                     tabIndex={-1}
                   >
-                    {partLabel(part, t)}
+                    {label}
                   </span>
-                  <span className="task-status" data-status={part.status}>
-                    {t(
-                      part.status === "running" && part.phase
-                        ? `task.phase.${part.phase}`
-                        : `task.status.${part.status}`,
+                  <div className="task-heading-actions">
+                    <span className="task-status" data-status={part.status}>
+                      {t(
+                        part.status === "running" && part.phase
+                          ? `task.phase.${part.phase}`
+                          : `task.status.${part.status}`,
+                      )}
+                    </span>
+                    {isUnfinished(part.status) && (
+                      <button
+                        type="button"
+                        className="quiet icon-button task-close"
+                        aria-label={t("task.cancelPartNamed", { title: label })}
+                        title={t("task.cancelPart")}
+                        onClick={() =>
+                          onCancelPart({
+                            kind: "part",
+                            taskId: task.id,
+                            partId: part.id,
+                            title: label,
+                            focusId: partTitleId,
+                          })
+                        }
+                      >
+                        <Icon name="close" />
+                      </button>
                     )}
-                  </span>
+                  </div>
                   {part.error && (
                     <p className="error task-error">
                       {describeFailure(part.error, part.phase)}
@@ -350,12 +409,50 @@ export function TaskList({
 } & TaskActions) {
   const { t } = useTranslation();
   const tasks = useSyncExternalStore(queue.subscribe, queue.getSnapshot);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [confirmation, setConfirmation] = useState<Confirmation>();
   const orderedTasks = tasks
     .slice()
     .reverse()
     .sort(
       (a, b) => Number(b.status === "running") - Number(a.status === "running"),
     );
+
+  useLayoutEffect(() => {
+    if (confirmation && dialog.current && !dialog.current.open) {
+      dialog.current.returnValue = "";
+      dialog.current.showModal();
+    }
+  }, [confirmation]);
+
+  function closeTask(task: Task) {
+    if (isUnfinished(task.status)) {
+      setConfirmation({ kind: "close", taskId: task.id, title: task.title });
+    } else {
+      heading.current?.focus({ preventScroll: true });
+      queue.remove(task.id);
+    }
+  }
+
+  function finishConfirmation(element: HTMLDialogElement) {
+    if (element.open) return;
+    const confirmed = element.returnValue === "confirm";
+    element.returnValue = "";
+    setConfirmation(undefined);
+    if (!confirmed || !confirmation) return;
+
+    if (confirmation.kind === "part") {
+      document
+        .getElementById(confirmation.focusId)
+        ?.focus({ preventScroll: true });
+      queue.cancelPart(confirmation.taskId, confirmation.partId);
+    } else {
+      heading.current?.focus({ preventScroll: true });
+      if (confirmation.kind === "clear") queue.clear();
+      else queue.remove(confirmation.taskId);
+    }
+  }
 
   return (
     <section className="queue-panel" aria-labelledby="queue-heading">
@@ -364,12 +461,23 @@ export function TaskList({
           <span className="queue-heading-icon" aria-hidden="true">
             <StackSimpleIcon className="icon" />
           </span>
-          <h2 id="queue-heading">{t("task.heading")}</h2>
+          <h2 id="queue-heading" ref={heading} tabIndex={-1}>
+            {t("task.heading")}
+          </h2>
         </div>
         {tasks.length > 0 && (
-          <p className="queue-count">
-            {t("task.count", { count: tasks.length })}
-          </p>
+          <div className="task-heading-actions">
+            <p className="queue-count">
+              {t("task.count", { count: tasks.length })}
+            </p>
+            <button
+              type="button"
+              className="quiet queue-clear"
+              onClick={() => setConfirmation({ kind: "clear" })}
+            >
+              {t("task.clear")}
+            </button>
+          </div>
         )}
       </header>
       {tasks.length === 0 ? (
@@ -395,10 +503,56 @@ export function TaskList({
               queue={queue}
               onRestore={onRestore}
               onRecover={onRecover}
+              onClose={closeTask}
+              onCancelPart={setConfirmation}
             />
           ))}
         </ul>
       )}
+      <dialog
+        ref={dialog}
+        className="settings-dialog confirmation-dialog"
+        aria-labelledby="queue-confirmation-title"
+        aria-describedby="queue-confirmation-description"
+        onClose={(event) => finishConfirmation(event.currentTarget)}
+      >
+        {confirmation && (
+          <form method="dialog" className="settings-form">
+            <header className="settings-header">
+              <div>
+                <h2 id="queue-confirmation-title">
+                  {t(`task.confirm.${confirmation.kind}.title`)}
+                </h2>
+                <p id="queue-confirmation-description" className="muted">
+                  {confirmation.kind === "clear"
+                    ? t("task.confirm.clear.description")
+                    : t(`task.confirm.${confirmation.kind}.description`, {
+                        title: confirmation.title,
+                      })}
+                </p>
+              </div>
+            </header>
+            <div className="settings-footer">
+              <div className="actions settings-actions">
+                <button type="submit" value="cancel" autoFocus>
+                  {t(
+                    confirmation.kind === "part"
+                      ? "task.keepPart"
+                      : "common.cancel",
+                  )}
+                </button>
+                <button type="submit" value="confirm" className="queue-confirm">
+                  {t(
+                    confirmation.kind === "part"
+                      ? "task.cancelPart"
+                      : `task.${confirmation.kind}`,
+                  )}
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+      </dialog>
     </section>
   );
 }

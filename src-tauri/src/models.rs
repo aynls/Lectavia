@@ -4,9 +4,9 @@ use std::{
     time::Duration,
 };
 
-#[cfg(feature = "desktop")]
-use crate::media::app_cache_dir;
 use crate::{error::AppError, locale::Locale, output::OutputFormat, settings::ModelConnection};
+#[cfg(feature = "desktop")]
+use crate::{media::app_cache_dir, task_runs::TaskRuns};
 use reqwest::{
     Client, StatusCode, Url,
     multipart::{Form, Part},
@@ -15,7 +15,7 @@ use reqwest::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 #[cfg(feature = "desktop")]
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
 use tokio::fs::{self, File};
 
 const MAX_AUDIO_BYTES: u64 = 25_000_000;
@@ -243,10 +243,16 @@ pub async fn transcribe(
 #[tauri::command]
 pub async fn transcribe_audio(
     app: AppHandle,
+    runs: State<'_, TaskRuns>,
+    run_id: String,
     files: Vec<PathBuf>,
     connection: ModelConnection,
 ) -> Result<String, AppError> {
-    transcribe(&app_cache_dir(&app)?, &files, &connection).await
+    runs.run(
+        &run_id,
+        transcribe(&app_cache_dir(&app)?, &files, &connection),
+    )
+    .await
 }
 
 #[derive(Deserialize, Serialize)]
@@ -434,9 +440,12 @@ pub async fn organize(
 #[cfg(feature = "desktop")]
 #[tauri::command]
 pub async fn organize_transcript(
+    runs: State<'_, TaskRuns>,
+    run_id: String,
     transcript: String,
     connection: ModelConnection,
     options: OrganizationOptions,
 ) -> Result<String, AppError> {
-    organize(&transcript, &connection, &options).await
+    runs.run(&run_id, organize(&transcript, &connection, &options))
+        .await
 }

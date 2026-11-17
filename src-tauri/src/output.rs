@@ -5,6 +5,8 @@ use std::{
 };
 
 use crate::error::AppError;
+#[cfg(feature = "desktop")]
+use crate::task_runs::TaskRuns;
 use clap::ValueEnum;
 use serde::Deserialize;
 #[cfg(feature = "desktop")]
@@ -147,7 +149,6 @@ pub struct OutputLabels {
     pub document_suffix: String,
 }
 
-#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn write_output(
     directory: String,
     title: String,
@@ -156,6 +157,56 @@ pub async fn write_output(
     part_index: Option<u32>,
     labels: OutputLabels,
 ) -> Result<String, AppError> {
+    write_document(
+        directory,
+        title,
+        format,
+        content,
+        part_index,
+        labels,
+        || Ok(()),
+    )
+}
+
+#[cfg(feature = "desktop")]
+#[tauri::command]
+pub async fn write_task_output(
+    runs: tauri::State<'_, TaskRuns>,
+    run_id: String,
+    directory: String,
+    title: String,
+    format: String,
+    content: String,
+    part_index: Option<u32>,
+    labels: OutputLabels,
+) -> Result<String, AppError> {
+    let cancellation = runs.subscribe(&run_id)?;
+    write_document(
+        directory,
+        title,
+        format,
+        content,
+        part_index,
+        labels,
+        || {
+            cancellation
+                .has_changed()
+                .map(|_| ())
+                .map_err(|_| "error.taskCancelled".into())
+        },
+    )
+}
+
+fn write_document(
+    directory: String,
+    title: String,
+    format: String,
+    content: String,
+    part_index: Option<u32>,
+    labels: OutputLabels,
+    check_active: impl Fn() -> Result<(), AppError>,
+) -> Result<String, AppError> {
+    check_active()?;
     let directory = selected_directory(&directory)?;
     let extension = match format.as_str() {
         "md" => ".md",
@@ -184,6 +235,7 @@ pub async fn write_output(
     let mut number = 1;
     loop {
         let path = candidate(directory, &stem, extension, number);
+        check_active()?;
         match pending.persist_noclobber(&path) {
             Ok(_) => return Ok(path.to_string_lossy().into_owned()),
             Err(error) if already_present(&error.error, &path) => {

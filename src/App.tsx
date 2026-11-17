@@ -1114,7 +1114,7 @@ export default function App({
       </main>
       <dialog
         ref={restoreDialog}
-        className="settings-dialog restore-dialog"
+        className="settings-dialog confirmation-dialog"
         aria-labelledby="restore-title"
         aria-describedby="restore-description"
         onClose={(event) => finishRestore(event.currentTarget)}

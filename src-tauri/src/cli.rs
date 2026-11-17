@@ -78,11 +78,7 @@ impl Job {
             None => report(self.locale.text(key)),
         };
         phase("task.phase.audio");
-        let cache = self.cache.path().to_owned();
-        let tools = self.tools.clone();
-        let audio = tokio::task::spawn_blocking(move || prepare_audio(&tools, &cache, part.source))
-            .await
-            .map_err(|error| AppError::detail("error.background", error))??;
+        let audio = prepare_audio(&self.tools, self.cache.path(), part.source, None).await?;
 
         phase("task.phase.transcription");
         let transcript = transcribe(self.cache.path(), &audio.files, &self.settings.asr).await;

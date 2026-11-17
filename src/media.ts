@@ -231,8 +231,11 @@ export async function inspectMedia(source: VideoSource): Promise<MediaInfo> {
   return { ...ordinaryVideo(info, source), sourceUrl: source.url };
 }
 
-export function prepareAudio(part: MediaPart): Promise<AudioChunks> {
-  return invoke("prepare_media_audio", { source: part.source });
+export function prepareAudio(
+  part: MediaPart,
+  runId: string,
+): Promise<AudioChunks> {
+  return invoke("prepare_media_audio", { source: part.source, runId });
 }
 
 export function removeAudio(chunks: AudioChunks): Promise<void> {

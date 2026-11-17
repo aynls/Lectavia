@@ -7,6 +7,8 @@ mod output;
 #[cfg(feature = "desktop")]
 mod prompt;
 mod settings;
+#[cfg(feature = "desktop")]
+mod task_runs;
 mod video;
 
 pub use cli::run as run_cli;
@@ -17,9 +19,12 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(media::AudioCache::default())
+        .manage(task_runs::TaskRuns::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            task_runs::begin_task_run,
+            task_runs::end_task_run,
             media::probe_remote_video,
             media::fetch_bilibili_video,
             media::resolve_bilibili_short_link,
@@ -30,7 +35,7 @@ pub fn run() {
             models::organize_transcript,
             output::create_output_directory,
             output::validate_output_directory,
-            output::write_output,
+            output::write_task_output,
             output::open_output,
             output::reveal_output,
             prompt::choose_prompt_file,

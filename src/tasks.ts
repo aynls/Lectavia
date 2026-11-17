@@ -24,7 +24,7 @@ import {
 import type { OutputLanguage } from "./output-language";
 
 type OutputFormat = "md" | "txt";
-type PartStatus = "queued" | "running" | "completed" | "failed";
+type PartStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 type TaskStatus = PartStatus | "partial";
 type Phase = "audio" | "transcription" | "organization" | "output";
 
@@ -74,9 +74,16 @@ export interface Task {
 
 interface QueuedPart {
   media: MediaPart;
+  cancellation: AbortController;
+  run?: PartRun;
   audio?: AudioChunks;
   transcript?: string;
   material?: string;
+}
+
+interface PartRun {
+  id: string;
+  registered: Promise<void>;
 }
 
 interface Job {
@@ -164,11 +171,37 @@ async function releaseAudio(part: QueuedPart): Promise<void> {
   if (audio) await removeAudio(audio).catch(() => undefined);
 }
 
+function endRun({ id, registered }: PartRun): void {
+  void registered
+    .then(() => invoke("end_task_run", { runId: id }))
+    .catch(() => undefined);
+}
+
+async function releasePart(part: QueuedPart): Promise<void> {
+  part.transcript = undefined;
+  part.material = undefined;
+  await releaseAudio(part);
+}
+
+function stopPart(part: QueuedPart): void {
+  if (part.cancellation.signal.aborted) return;
+  part.cancellation.abort();
+  if (part.run) endRun(part.run);
+  else void releasePart(part);
+}
+
+export function isUnfinished(status: TaskStatus): boolean {
+  return status === "queued" || status === "running";
+}
+
 function taskStatus(parts: readonly TaskPart[], completed: number): TaskStatus {
   if (parts.some((part) => part.status === "running")) return "running";
   if (parts.some((part) => part.status === "queued")) return "queued";
   if (completed === parts.length) return "completed";
-  return completed > 0 ? "partial" : "failed";
+  if (completed > 0) return "partial";
+  return parts.some((part) => part.status === "failed")
+    ? "failed"
+    : "cancelled";
 }
 
 export function revealOutput(
@@ -211,6 +244,37 @@ export class TaskQueue {
     return job && structuredClone(job.request);
   }
 
+  remove(taskId: string): void {
+    const job = this.#jobs.get(taskId);
+    if (!job) return;
+
+    this.#jobs.delete(taskId);
+    this.#pending = this.#pending.filter((pending) => pending.job !== job);
+    job.parts.forEach(stopPart);
+    this.publish();
+  }
+
+  clear(): void {
+    const jobs = Array.from(this.#jobs.values());
+    this.#jobs.clear();
+    this.#pending = [];
+    jobs.forEach((job) => job.parts.forEach(stopPart));
+    this.publish();
+  }
+
+  cancelPart(taskId: string, partId: string): void {
+    const job = this.#jobs.get(taskId);
+    if (!job) return;
+    const index = job.task.parts.findIndex((part) => part.id === partId);
+    if (index < 0 || !isUnfinished(job.task.parts[index].status)) return;
+
+    this.#pending = this.#pending.filter(
+      (pending) => pending.job !== job || pending.index !== index,
+    );
+    stopPart(job.parts[index]);
+    this.updatePart(job, index, { status: "cancelled", phase: undefined });
+  }
+
   enqueue(input: TaskRequest): void {
     const request = structuredClone(input);
     const selected = new Set(request.selectedParts);
@@ -225,6 +289,7 @@ export class TaskQueue {
               ? (part.number ?? index + 1)
               : undefined,
           },
+          cancellation: new AbortController(),
         },
       ];
     });
@@ -381,9 +446,19 @@ export class TaskQueue {
   }
 
   private async runScheduledPart({ job, index }: PendingPart): Promise<void> {
+    const part = job.parts[index];
+    const runId = crypto.randomUUID();
+    const run = {
+      id: runId,
+      registered: invoke<void>("begin_task_run", { runId }),
+    };
+    part.run = run;
     try {
-      await this.runPart(job, index);
+      await this.runPart(job, index, run);
     } finally {
+      if (part.run === run) part.run = undefined;
+      if (part.cancellation.signal.aborted) await releasePart(part);
+      else endRun(run);
       this.#active -= 1;
       this.drain();
     }
@@ -408,9 +483,10 @@ export class TaskQueue {
       }));
   }
 
-  private async runPart(job: Job, index: number): Promise<void> {
+  private async runPart(job: Job, index: number, run: PartRun): Promise<void> {
     const { asr, llm, format, outputDirectory, media, locale } = job.request;
     const part = job.parts[index];
+    const { signal } = part.cancellation;
     const t = translator(locale);
     const partTitle =
       part.media.title ??
@@ -418,43 +494,56 @@ export class TaskQueue {
         ? t("media.part", { number: part.media.number })
         : job.task.title);
     const setPhase = (phase: Phase) => {
+      signal.throwIfAborted();
       this.updatePart(job, index, { status: "running", phase });
+      signal.throwIfAborted();
     };
 
     try {
+      this.updatePart(job, index, { status: "running" });
+      await run.registered;
+      signal.throwIfAborted();
       let directory = job.multipartDirectory;
       if (media.multipart && !directory) {
-        this.updatePart(job, index, { status: "running" });
         directory = await this.prepareMultipartDirectory(job);
       }
       if (part.material === undefined) {
         if (part.transcript === undefined) {
           if (part.audio === undefined) {
             setPhase("audio");
-            part.audio = await prepareAudio(part.media);
+            part.audio = await prepareAudio(part.media, run.id);
           }
 
           setPhase("transcription");
-          part.transcript = await transcribeAudio(part.audio.files, asr);
+          part.transcript = await transcribeAudio(
+            part.audio.files,
+            asr,
+            run.id,
+          );
           await releaseAudio(part);
         }
 
         setPhase("organization");
-        part.material = await organizeTranscript(part.transcript, {
-          connection: llm,
-          locale,
-          outputLanguage: job.request.outputLanguage,
-          videoTitle: media.title,
-          partTitle: media.multipart ? partLabel(part.media, t) : undefined,
-          description: media.description,
-          format,
-          instructions: job.instructions,
-        });
+        part.material = await organizeTranscript(
+          part.transcript,
+          {
+            connection: llm,
+            locale,
+            outputLanguage: job.request.outputLanguage,
+            videoTitle: media.title,
+            partTitle: media.multipart ? partLabel(part.media, t) : undefined,
+            description: media.description,
+            format,
+            instructions: job.instructions,
+          },
+          run.id,
+        );
         part.transcript = undefined;
       }
 
       setPhase("output");
-      const outputPath = await invoke<string>("write_output", {
+      const outputPath = await invoke<string>("write_task_output", {
+        runId: run.id,
         directory: directory ?? outputDirectory,
         title: media.multipart ? partTitle : job.task.title,
         labels: {
@@ -465,6 +554,7 @@ export class TaskQueue {
         content: part.material,
         partIndex: part.media.number,
       });
+      signal.throwIfAborted();
       part.material = undefined;
       this.updatePart(job, index, {
         status: "completed",
@@ -473,6 +563,7 @@ export class TaskQueue {
         outputDirectory: directory,
       });
     } catch (error) {
+      if (signal.aborted) return;
       const phase = job.task.parts[index].phase ?? "output";
       const failure = failureMessage(error, job);
       if (
@@ -481,6 +572,7 @@ export class TaskQueue {
       ) {
         await releaseAudio(part);
       }
+      if (signal.aborted) return;
       this.updatePart(job, index, {
         status: "failed",
         phase,

@@ -170,16 +170,19 @@ export async function listModels(
 export function transcribeAudio(
   files: string[],
   connection: ModelConnection,
+  runId: string,
 ): Promise<string> {
   return invoke("transcribe_audio", {
     files,
     connection: normalizeConnection(connection),
+    runId,
   });
 }
 
 export function organizeTranscript(
   transcript: string,
   { connection, ...options }: OrganizationOptions,
+  runId: string,
 ): Promise<string> {
   return invoke("organize_transcript", {
     transcript,
@@ -190,5 +193,6 @@ export function organizeTranscript(
       ),
     },
     connection: { ...connection, ...normalizeConnection(connection) },
+    runId,
   });
 }

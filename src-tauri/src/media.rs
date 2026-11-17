@@ -14,8 +14,12 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 #[cfg(feature = "desktop")]
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, State};
 use tempfile::TempDir;
+use tokio::{io::AsyncReadExt, sync::watch};
+
+#[cfg(feature = "desktop")]
+use crate::task_runs::TaskRuns;
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -59,7 +63,6 @@ impl PreparedAudio {
     }
 }
 
-#[derive(Clone)]
 pub struct MediaTools {
     resource_dir: Option<PathBuf>,
     local_data_dir: Option<PathBuf>,
@@ -183,13 +186,49 @@ fn require_ffmpeg(tools: &MediaTools) -> Result<PathBuf, AppError> {
     require_tool(tools, "ffmpeg")
 }
 
-fn process_output(command: &mut Command, failure: &'static str) -> Result<Output, AppError> {
+async fn process_output(
+    mut command: Command,
+    failure: &'static str,
+    cancellation: Option<&mut watch::Receiver<()>>,
+) -> Result<Output, AppError> {
     #[cfg(windows)]
     command.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
-    let output = command
-        .output()
-        .map_err(|error| AppError::detail(failure, error))?;
+    let output = if let Some(cancellation) = cancellation {
+        if cancellation.has_changed().is_err() {
+            return Err("error.taskCancelled".into());
+        }
+        let mut child = tokio::process::Command::from(command)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|error| AppError::detail(failure, error))?;
+        let mut stderr = child.stderr.take().unwrap();
+        let mut diagnostics = Vec::new();
+        let result = tokio::select! {
+            biased;
+            _ = cancellation.changed() => {
+                let _ = child.kill().await;
+                return Err("error.taskCancelled".into());
+            }
+            result = async { tokio::try_join!(child.wait(), stderr.read_to_end(&mut diagnostics)) } => result,
+        };
+        let (status, _) = result.map_err(|error| AppError::detail(failure, error))?;
+        Output {
+            status,
+            stdout: Vec::new(),
+            stderr: diagnostics,
+        }
+    } else {
+        tokio::process::Command::from(command)
+            .kill_on_drop(true)
+            .output()
+            .await
+            .map_err(|error| AppError::detail(failure, error))?
+    };
+
     if output.status.success() {
         return Ok(output);
     }
@@ -291,22 +330,17 @@ pub async fn probe_video(
     flat: bool,
 ) -> Result<Value, AppError> {
     let url = platform_url(&url, youtube)?;
-    let tools = tools.clone();
-    tokio::task::spawn_blocking(move || {
-        let ffmpeg = require_ffmpeg(&tools).ok();
-        let mut command = yt_dlp(&tools, youtube, ffmpeg.as_deref())?;
-        command.arg("--dump-single-json");
-        if flat {
-            command.arg("--flat-playlist");
-        } else {
-            command.args(["--no-playlist", "--playlist-items", "1"]);
-        }
-        command.arg("--").arg(url.as_str());
-        let output = process_output(&mut command, "error.probe")?;
-        serde_json::from_slice(&output.stdout).map_err(|_| "error.invalidVideoMetadata".into())
-    })
-    .await
-    .map_err(|error| AppError::detail("error.background", error))?
+    let ffmpeg = require_ffmpeg(tools).ok();
+    let mut command = yt_dlp(tools, youtube, ffmpeg.as_deref())?;
+    command.arg("--dump-single-json");
+    if flat {
+        command.arg("--flat-playlist");
+    } else {
+        command.args(["--no-playlist", "--playlist-items", "1"]);
+    }
+    command.arg("--").arg(url.as_str());
+    let output = process_output(command, "error.probe", None).await?;
+    serde_json::from_slice(&output.stdout).map_err(|_| "error.invalidVideoMetadata".into())
 }
 
 #[cfg(feature = "desktop")]
@@ -392,12 +426,13 @@ pub fn app_cache_dir(app: &AppHandle) -> Result<PathBuf, AppError> {
         .map_err(|_| "error.cacheLocation".into())
 }
 
-fn download_audio(
+async fn download_audio(
     tools: &MediaTools,
     directory: &Path,
     ffmpeg: &Path,
     url: &str,
     youtube: bool,
+    cancellation: Option<&mut watch::Receiver<()>>,
 ) -> Result<PathBuf, AppError> {
     let url = platform_url(url, youtube)?;
     let mut command = yt_dlp(tools, youtube, Some(ffmpeg))?;
@@ -418,7 +453,7 @@ fn download_audio(
         ])
         .arg("--")
         .arg(url.as_str());
-    process_output(&mut command, "error.audioDownload")?;
+    process_output(command, "error.audioDownload", cancellation).await?;
     list_files(directory)?
         .into_iter()
         .find(|path| path.file_stem().is_some_and(|stem| stem == "source"))
@@ -435,10 +470,11 @@ fn list_files(directory: &Path) -> Result<Vec<PathBuf>, AppError> {
         .map_err(|error| AppError::detail("error.audioCacheRead", error))
 }
 
-pub fn prepare_audio(
+pub async fn prepare_audio(
     tools: &MediaTools,
     cache_dir: &Path,
     source: MediaSource,
+    mut cancellation: Option<&mut watch::Receiver<()>>,
 ) -> Result<PreparedAudio, AppError> {
     let ffmpeg = require_ffmpeg(tools)?;
     let root = cache_dir.join("media");
@@ -451,12 +487,29 @@ pub fn prepare_audio(
     let directory = scratch.path();
     let (input, remove_input) = match source {
         MediaSource::Bilibili { url } => (
-            download_audio(tools, directory, &ffmpeg, &url, false)?,
+            download_audio(
+                tools,
+                directory,
+                &ffmpeg,
+                &url,
+                false,
+                cancellation.as_deref_mut(),
+            )
+            .await?,
             true,
         ),
-        MediaSource::Youtube { url } => {
-            (download_audio(tools, directory, &ffmpeg, &url, true)?, true)
-        }
+        MediaSource::Youtube { url } => (
+            download_audio(
+                tools,
+                directory,
+                &ffmpeg,
+                &url,
+                true,
+                cancellation.as_deref_mut(),
+            )
+            .await?,
+            true,
+        ),
         MediaSource::Local { path } => {
             if !path.is_absolute() || !path.is_file() {
                 return Err("error.localVideoMissing".into());
@@ -466,43 +519,42 @@ pub fn prepare_audio(
     };
 
     // Keep chunks below five minutes, including the encoder's frame alignment.
-    process_output(
-        Command::new(&ffmpeg)
-            .current_dir(directory)
-            .args([
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-nostdin",
-                "-protocol_whitelist",
-                "file",
-                "-i",
-            ])
-            .arg(&input)
-            .args([
-                "-map",
-                "0:a:0",
-                "-vn",
-                "-map_metadata",
-                "-1",
-                "-ac",
-                "1",
-                "-ar",
-                "16000",
-                "-c:a",
-                "libmp3lame",
-                "-b:a",
-                "64k",
-                "-f",
-                "segment",
-                "-segment_time",
-                "240",
-                "-reset_timestamps",
-                "1",
-                "chunk-%06d.mp3",
-            ]),
-        "error.audioExtract",
-    )?;
+    let mut command = Command::new(&ffmpeg);
+    command
+        .current_dir(directory)
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostdin",
+            "-protocol_whitelist",
+            "file",
+            "-i",
+        ])
+        .arg(&input)
+        .args([
+            "-map",
+            "0:a:0",
+            "-vn",
+            "-map_metadata",
+            "-1",
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "64k",
+            "-f",
+            "segment",
+            "-segment_time",
+            "240",
+            "-reset_timestamps",
+            "1",
+            "chunk-%06d.mp3",
+        ]);
+    process_output(command, "error.audioExtract", cancellation).await?;
 
     if remove_input {
         fs::remove_file(input)
@@ -525,25 +577,24 @@ pub fn prepare_audio(
 #[tauri::command]
 pub async fn prepare_media_audio(
     app: AppHandle,
+    runs: State<'_, TaskRuns>,
+    run_id: String,
     source: MediaSource,
 ) -> Result<AudioChunks, AppError> {
+    let mut cancellation = runs.subscribe(&run_id)?;
     let tools = MediaTools::desktop(&app);
     let cache = app_cache_dir(&app)?;
-    tokio::task::spawn_blocking(move || {
-        let audio = prepare_audio(&tools, &cache, source)?;
-        let directory = audio.scratch.path().to_owned();
-        app.state::<AudioCache>()
-            .0
-            .lock()
-            .unwrap()
-            .insert(directory.clone(), audio.scratch);
-        Ok(AudioChunks {
-            directory,
-            files: audio.files,
-        })
+    let audio = prepare_audio(&tools, &cache, source, Some(&mut cancellation)).await?;
+    let directory = audio.scratch.path().to_owned();
+    app.state::<AudioCache>()
+        .0
+        .lock()
+        .unwrap()
+        .insert(directory.clone(), audio.scratch);
+    Ok(AudioChunks {
+        directory,
+        files: audio.files,
     })
-    .await
-    .map_err(|error| AppError::detail("error.background", error))?
 }
 
 #[cfg(feature = "desktop")]
