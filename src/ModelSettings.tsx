@@ -143,9 +143,17 @@ function ProviderFields({
   function editEndpoint(
     changes: Partial<Pick<ModelConnection, "baseUrl" | "apiKey">>,
   ) {
+    const providerChanged =
+      changes.baseUrl !== undefined &&
+      changes.baseUrl.trim().replace(/\/+$/, "") !==
+        connection.baseUrl.trim().replace(/\/+$/, "");
     request.current++;
     setLookup(undefined);
-    setConnection({ ...connection, ...changes, reasoningEffort: undefined });
+    setConnection({
+      ...connection,
+      ...changes,
+      reasoningEffort: providerChanged ? undefined : connection.reasoningEffort,
+    });
   }
 
   function editModel(model: string) {
@@ -311,9 +319,15 @@ export function ModelSettings({
       }
     }
 
+    const form = new FormData(event.currentTarget);
+    const effort =
+      form.get("reasoning-effort") ?? form.get("reasoning-effort-choice");
+    const reasoningEffort =
+      typeof effort === "string" ? effort.trim() || undefined : undefined;
+
     setSaving(true);
     try {
-      await onSave(draft);
+      await onSave({ ...draft, llm: { ...draft.llm, reasoningEffort } });
       modal.current?.close();
     } catch (error) {
       setError(
