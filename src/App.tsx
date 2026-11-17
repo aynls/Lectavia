@@ -2,11 +2,7 @@ import { useRef, useState, type SubmitEvent } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { inspectMedia, type MediaInfo } from "./media";
-import {
-  defaultModelSettings,
-  getModelConnections,
-  ModelSettings,
-} from "./ModelSettings";
+import { defaultModelSettings, ModelSettings } from "./ModelSettings";
 import { validateModelConnection } from "./models";
 import { TaskList } from "./TaskList";
 import { TaskQueue } from "./tasks";
@@ -147,7 +143,7 @@ export default function App() {
       return;
     }
 
-    const { asr, llm } = getModelConnections(settings);
+    const { asr, llm } = settings;
     try {
       validateModelConnection(asr);
       validateModelConnection(llm);

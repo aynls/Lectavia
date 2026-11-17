@@ -9,7 +9,6 @@ import {
 export interface ModelSettingsValue {
   asr: ModelConnection;
   llm: ModelConnection;
-  shared: boolean;
 }
 
 export const defaultModelSettings: ModelSettingsValue = {
@@ -19,59 +18,50 @@ export const defaultModelSettings: ModelSettingsValue = {
     model: OPENROUTER_ASR_MODEL,
   },
   llm: { baseUrl: OPENROUTER_BASE_URL, apiKey: "", model: "" },
-  shared: true,
 };
-
-export function getModelConnections(settings: ModelSettingsValue) {
-  const { asr, llm, shared } = settings;
-  return { asr, llm: shared ? { ...asr, model: llm.model } : llm };
-}
 
 function ProviderFields({
   connection,
   setConnection,
   group,
-  shared,
 }: {
   connection: ModelConnection;
   setConnection: (connection: ModelConnection) => void;
   group: string;
-  shared?: boolean;
 }) {
   const id = useId();
 
   return (
     <fieldset className="settings-fields">
       <legend>{group}</legend>
-      {!shared && (
-        <>
-          <label htmlFor={id + "-url"}>API 基础地址</label>
-          <input
-            id={id + "-url"}
-            type="url"
-            value={connection.baseUrl}
-            required
-            spellCheck={false}
-            onChange={(event) =>
-              setConnection({ ...connection, baseUrl: event.target.value })
-            }
-          />
-          <label htmlFor={id + "-key"}>API Key</label>
-          <input
-            id={id + "-key"}
-            type="password"
-            autoComplete="off"
-            value={connection.apiKey}
-            required
-            onChange={(event) =>
-              setConnection({ ...connection, apiKey: event.target.value })
-            }
-          />
-        </>
-      )}
+      <label htmlFor={id + "-url"}>API 基础地址</label>
+      <input
+        id={id + "-url"}
+        name={id + "-url"}
+        type="url"
+        value={connection.baseUrl}
+        required
+        spellCheck={false}
+        onChange={(event) =>
+          setConnection({ ...connection, baseUrl: event.target.value })
+        }
+      />
+      <label htmlFor={id + "-key"}>API Key</label>
+      <input
+        id={id + "-key"}
+        name={id + "-key"}
+        type="password"
+        autoComplete="off"
+        value={connection.apiKey}
+        required
+        onChange={(event) =>
+          setConnection({ ...connection, apiKey: event.target.value })
+        }
+      />
       <label htmlFor={id + "-model"}>模型 ID</label>
       <input
         id={id + "-model"}
+        name={id + "-model"}
         value={connection.model}
         required
         spellCheck={false}
@@ -106,7 +96,7 @@ export function ModelSettings({
     event.preventDefault();
 
     try {
-      const { asr, llm } = getModelConnections(draft);
+      const { asr, llm } = draft;
       validateModelConnection(asr);
       validateModelConnection(llm);
       onSave(draft);
@@ -128,30 +118,23 @@ export function ModelSettings({
       >
         <h2 id="settings-title">模型设置</h2>
         <p className="muted">
-          密钥仅保存在本次应用运行期间。转写默认使用 OpenRouter。
+          分别配置两项 OpenAI 兼容服务。密钥仅保存在本次应用运行期间。
         </p>
-        <form onSubmit={saveSettings}>
+        <form aria-labelledby="settings-title" onSubmit={saveSettings}>
           <div className="settings-group" ref={firstField}>
             <ProviderFields
               connection={draft.asr}
-              setConnection={(asr) => setDraft({ ...draft, asr })}
+              setConnection={(asr) =>
+                setDraft((current) => ({ ...current, asr }))
+              }
               group="语音转写"
             />
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={draft.shared}
-                onChange={(event) =>
-                  setDraft({ ...draft, shared: event.target.checked })
-                }
-              />
-              整理模型复用转写服务的地址和密钥
-            </label>
             <ProviderFields
               connection={draft.llm}
-              setConnection={(llm) => setDraft({ ...draft, llm })}
+              setConnection={(llm) =>
+                setDraft((current) => ({ ...current, llm }))
+              }
               group="资料整理"
-              shared={draft.shared}
             />
           </div>
           {error && (
