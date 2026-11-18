@@ -1,4 +1,7 @@
 {
+  "mcp.llmSettings": "Set up document organization in Lectavia’s model settings.",
+  "mcp.transcriptIds": "Provide a nonempty list of unique transcript IDs.",
+  "mcp.transcriptRequired": "This result is not a raw transcript.",
   "mcp.resultMissing": "Unknown result_id in this server process.",
   "mcp.page": "Invalid cursor or page size. Use the returned next_cursor and a limit of 1–16000 characters.",
   "mcp.jobMissing": "Unknown job_id in this server process.",

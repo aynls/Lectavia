@@ -1,6 +1,6 @@
 mod jobs;
 
-use jobs::{Jobs, VideoInput};
+use jobs::{DocumentOptions, Jobs, Source, VideoInput};
 use std::process::ExitCode;
 
 use rmcp::{
@@ -44,6 +44,17 @@ struct TranscriptionRequest {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+struct DocumentRequest {
+    /// Unique to this operation. Reuse it for resends.
+    request_id: String,
+    /// Supply either a video (with optional parts) or a list of transcript_ids.
+    source: Source,
+    #[serde(flatten)]
+    options: DocumentOptions,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct JobId {
     job_id: String,
 }
@@ -73,6 +84,15 @@ fn response(result: Result<Value, AppError>) -> CallToolResult {
 #[tool_router]
 impl Lectavia {
     #[tool(
+        description = "Generate md or txt files from a video or existing transcripts. Returns job_id. Poll get_job for file paths and document IDs."
+    )]
+    fn generate_document(&self, Parameters(input): Parameters<DocumentRequest>) -> CallToolResult {
+        response(
+            self.jobs
+                .submit(input.request_id, input.source, Some(input.options)),
+        )
+    }
+    #[tool(
         description = "Read one page of a transcript or document. Continue with next_cursor until it is null."
     )]
     fn read_result(&self, Parameters(input): Parameters<ReadResult>) -> CallToolResult {
@@ -95,7 +115,10 @@ impl Lectavia {
         &self,
         Parameters(input): Parameters<TranscriptionRequest>,
     ) -> CallToolResult {
-        response(self.jobs.submit(input.request_id, input.source))
+        response(
+            self.jobs
+                .submit(input.request_id, Source::Video(input.source), None),
+        )
     }
 
     #[tool(description = "Inspect video metadata and available Bilibili parts.")]

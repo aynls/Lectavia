@@ -1,4 +1,7 @@
 {
+  "mcp.llmSettings": "请在 Lectavia 的模型设置中配置文稿整理。",
+  "mcp.transcriptIds": "请提供至少一个转写结果 ID，并移除重复项。",
+  "mcp.transcriptRequired": "此结果不是原始转写稿。",
   "mcp.resultMissing": "当前服务进程中找不到此结果。",
   "mcp.page": "分页参数无效。请使用返回的 next_cursor，并将 limit 设为 1 至 16000 个字符。",
   "mcp.jobMissing": "当前服务进程中找不到此任务。",

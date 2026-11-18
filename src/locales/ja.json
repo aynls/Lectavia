@@ -1,4 +1,7 @@
 {
+  "mcp.llmSettings": "Lectavia のモデル設定で文書整理を設定してください。",
+  "mcp.transcriptIds": "重複のない文字起こし結果 ID を 1 件以上指定してください。",
+  "mcp.transcriptRequired": "この結果は文字起こし原稿ではありません。",
   "mcp.resultMissing": "このサーバープロセスに該当する結果がありません。",
   "mcp.page": "ページ指定が無効です。返された next_cursor を使用し、limit には 1～16000 文字を指定してください。",
   "mcp.jobMissing": "このサーバープロセスに該当するジョブがありません。",

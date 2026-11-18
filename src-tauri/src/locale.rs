@@ -6,6 +6,7 @@ use serde_json::{Map, Value};
 
 use crate::error::AppError;
 
+#[cfg_attr(feature = "mcp", derive(schemars::JsonSchema, serde::Serialize))]
 #[derive(Clone, Copy, Deserialize, ValueEnum)]
 pub enum Locale {
     #[serde(rename = "zh-CN")]

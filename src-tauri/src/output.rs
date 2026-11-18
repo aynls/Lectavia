@@ -18,6 +18,7 @@ mod linux;
 
 const MAX_TITLE_UNITS: usize = 100;
 
+#[cfg_attr(feature = "mcp", derive(schemars::JsonSchema, serde::Serialize))]
 #[derive(Clone, Copy, Deserialize, ValueEnum)]
 #[serde(rename_all = "lowercase")]
 pub enum OutputFormat {

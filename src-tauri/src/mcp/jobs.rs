@@ -1,3 +1,7 @@
+mod document;
+
+use document::Document;
+pub(super) use document::DocumentOptions;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -19,12 +23,20 @@ use crate::{
 };
 
 #[derive(Clone, Deserialize, JsonSchema, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct VideoInput {
     /// Local video path or HTTPS Bilibili / YouTube video URL.
     video: String,
     /// One-based Bilibili part numbers. Defaults to the URL's p parameter or the first part.
     #[serde(default)]
     parts: Vec<u32>,
+}
+
+#[derive(Deserialize, JsonSchema, Serialize)]
+#[serde(untagged, deny_unknown_fields)]
+pub(super) enum Source {
+    Video(VideoInput),
+    Transcripts { transcript_ids: Vec<String> },
 }
 
 #[derive(Clone)]
@@ -42,7 +54,8 @@ struct Registry {
 }
 
 struct Job {
-    source: VideoInput,
+    source: Source,
+    document: Option<Document>,
     state: Mutex<JobState>,
 }
 
@@ -90,6 +103,9 @@ impl Progress {
 }
 
 struct PartInfo {
+    video_key: String,
+    multipart: bool,
+    description: Option<String>,
     video_title: String,
     title: String,
     number: Option<u32>,
@@ -107,9 +123,12 @@ struct PartState {
     progress: Progress,
     audio: Option<Arc<PreparedAudio>>,
     transcript_id: Option<String>,
+    document_id: Option<String>,
+    output_path: Option<String>,
 }
 
 struct Artifact {
+    kind: &'static str,
     info: Arc<PartInfo>,
     text: Arc<str>,
 }
@@ -140,7 +159,7 @@ impl Jobs {
             .nth(limit)
             .map(|(offset, _)| cursor + offset);
         Ok(json!({
-            "result_id":id, "kind":"transcript", "video_title":result.info.video_title,
+        "result_id":id, "kind":result.kind, "video_title":result.info.video_title,
             "part_title": result.info.title, "number":result.info.number,
             "text": &result.text[cursor..end.unwrap_or(result.text.len())], "next_cursor":end,
         }))
@@ -168,7 +187,8 @@ impl Jobs {
                 "part_id": part.id, "number": part.info.number, "title": part.info.title,
                 "video_title": part.info.video_title, "status": state.progress.status,
                 "phase": state.progress.phase, "error": state.progress.error,
-                "transcript_id": state.transcript_id,
+                "transcript_id": state.transcript_id, "document_id": state.document_id,
+                "output_path": state.output_path,
             }));
         }
         let status = if statuses.is_empty() {
@@ -198,11 +218,16 @@ impl Jobs {
         })
     }
 
-    pub fn submit(&self, request_id: String, source: VideoInput) -> Result<Value, AppError> {
+    pub fn submit(
+        &self,
+        request_id: String,
+        source: Source,
+        document: Option<DocumentOptions>,
+    ) -> Result<Value, AppError> {
         if request_id.trim().is_empty() {
             return Err("mcp.requestId".into());
         }
-        let fingerprint = json!(source);
+        let fingerprint = json!({"source": source, "document": document});
         let mut registry = self.registry.lock().unwrap();
         if let Some((previous, id)) = registry.requests.get(&request_id) {
             if *previous != fingerprint {
@@ -213,6 +238,7 @@ impl Jobs {
         let id = new_id();
         let job = Arc::new(Job {
             source,
+            document: document.map(Document::new),
             state: Default::default(),
         });
         registry
@@ -228,12 +254,12 @@ impl Jobs {
         let jobs = self.clone();
         tokio::spawn(async move {
             job.state.lock().unwrap().preparation.running("inspect");
-            match jobs.prepare(&job.source).await {
+            match jobs.prepare(&job).await {
                 Ok(parts) => {
                     let mut state = job.state.lock().unwrap();
                     state.preparation.finish(Ok(()));
                     for part in &parts {
-                        jobs.schedule_part(part.clone());
+                        jobs.schedule_part(job.clone(), part.clone());
                     }
                     state.parts = parts;
                 }
@@ -242,17 +268,53 @@ impl Jobs {
         });
     }
 
-    async fn prepare(&self, input: &VideoInput) -> Result<Vec<Arc<Part>>, AppError> {
+    async fn prepare(&self, job: &Job) -> Result<Vec<Arc<Part>>, AppError> {
+        if let Some(document) = &job.document {
+            job.state.lock().unwrap().preparation.running("output");
+            document.destination().await?;
+        }
+        job.state.lock().unwrap().preparation.running("inspect");
+        let input = match &job.source {
+            Source::Video(input) => input,
+            Source::Transcripts { transcript_ids } => {
+                let mut seen = std::collections::HashSet::new();
+                if transcript_ids.is_empty() || !transcript_ids.iter().all(|id| seen.insert(id)) {
+                    return Err("mcp.transcriptIds".into());
+                }
+                return transcript_ids
+                    .iter()
+                    .map(|id| {
+                        let artifact = self.artifact(id)?;
+                        if artifact.kind != "transcript" {
+                            return Err("mcp.transcriptRequired".into());
+                        }
+                        Ok(Arc::new(Part {
+                            id: new_id(),
+                            info: artifact.info.clone(),
+                            state: Mutex::new(PartState {
+                                transcript_id: Some(id.clone()),
+                                ..Default::default()
+                            }),
+                        }))
+                    })
+                    .collect();
+            }
+        };
         let source = parse_source(input.video.clone().into())?;
         if !input.parts.is_empty() && !matches!(source, MediaSource::Bilibili { .. }) {
             return Err("cli.partsUnsupported".into());
         }
         let video = inspect(&MediaTools::cli(), source).await?;
         let title = video.title.clone();
+        let multipart = video.parts.len() > 1;
+        let description = video.description.clone();
         Ok(choose_parts(video, input.parts.clone())?
             .into_iter()
             .map(|part| {
                 let info = PartInfo {
+                    video_key: input.video.clone(),
+                    multipart,
+                    description: description.clone(),
                     video_title: title.clone(),
                     title: part.title.unwrap_or_else(|| title.clone()),
                     number: part.number,
@@ -267,16 +329,43 @@ impl Jobs {
             .collect())
     }
 
-    fn schedule_part(&self, part: Arc<Part>) {
+    fn schedule_part(&self, job: Arc<Job>, part: Arc<Part>) {
         let jobs = self.clone();
         tokio::spawn(async move {
             let _permit = jobs.workers.acquire().await.expect("job pool stays open");
-            let result = jobs.run_part(&part).await;
+            let result = jobs.run_part(&part, job.document.as_ref()).await;
             part.state.lock().unwrap().progress.finish(result);
         });
     }
 
-    async fn run_part(&self, part: &Part) -> Result<(), AppError> {
+    async fn run_part(&self, part: &Part, document: Option<&Document>) -> Result<(), AppError> {
+        let cached = part.state.lock().unwrap().transcript_id.clone();
+        let transcript_id = match cached {
+            Some(id) => id,
+            None => self.transcribe_part(part).await?,
+        };
+        if let Some(document) = document {
+            let cached = part.state.lock().unwrap().document_id.clone();
+            let id = match cached {
+                Some(id) => id,
+                None => {
+                    part.state.lock().unwrap().progress.running("organization");
+                    let transcript = self.artifact(&transcript_id)?;
+                    let text = document.organize(&transcript.text, &part.info).await?;
+                    let id = self.store_result(part, "document", text);
+                    part.state.lock().unwrap().document_id = Some(id.clone());
+                    id
+                }
+            };
+            part.state.lock().unwrap().progress.running("output");
+            let result = self.artifact(&id)?;
+            let path = document.save(&part.info, &result.text).await?;
+            part.state.lock().unwrap().output_path = Some(path);
+        }
+        Ok(())
+    }
+
+    async fn transcribe_part(&self, part: &Part) -> Result<String, AppError> {
         part.state.lock().unwrap().progress.running("transcription");
         let settings = read_model_settings(APP_IDENTIFIER.to_owned())
             .await?
@@ -304,17 +393,23 @@ impl Jobs {
         };
         part.state.lock().unwrap().progress.running("transcription");
         let text = transcribe(self.cache.path(), &audio.files, &settings.asr).await?;
+        let id = self.store_result(part, "transcript", text);
+        let mut state = part.state.lock().unwrap();
+        state.transcript_id = Some(id.clone());
+        state.audio = None;
+        Ok(id)
+    }
+
+    fn store_result(&self, part: &Part, kind: &'static str, text: String) -> String {
         let id = new_id();
         self.registry.lock().unwrap().results.insert(
             id.clone(),
             Arc::new(Artifact {
+                kind,
                 info: part.info.clone(),
                 text: text.into(),
             }),
         );
-        let mut state = part.state.lock().unwrap();
-        state.transcript_id = Some(id);
-        state.audio = None;
-        Ok(())
+        id
     }
 }
