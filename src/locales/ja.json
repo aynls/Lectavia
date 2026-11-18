@@ -274,6 +274,8 @@
   "error.outputSave": "原稿を保存できませんでした。{{detail}}",
   "error.outputGone": "作成したファイルまたはフォルダーは存在しません。",
   "error.outputReveal": "ファイルの場所を開けませんでした。{{detail}}",
+  "error.outputRevealLinux": "原稿の場所を開けませんでした。「ファイルの場所」を展開するとパスを確認できます。ファイルマネージャー：{{primary}}／デスクトップポータル：{{fallback}}",
+  "error.desktopServiceTimeout": "{{seconds}} 秒以内に応答がありませんでした",
   "error.outputOpen": "原稿を開けませんでした。{{detail}}",
   "workspace.title": "動画から原稿へ",
   "media.intro": "動画の参照元として、リンクかローカルファイルのどちらかを選択します。",

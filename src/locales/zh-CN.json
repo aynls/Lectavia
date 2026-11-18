@@ -274,6 +274,8 @@
   "error.outputSave": "无法保存文稿。{{detail}}",
   "error.outputGone": "生成的文件或文件夹已不存在。",
   "error.outputReveal": "无法打开文件位置。{{detail}}",
+  "error.outputRevealLinux": "无法定位文稿。可展开「文件位置」查看路径。文件管理器：{{primary}}；桌面门户：{{fallback}}",
+  "error.desktopServiceTimeout": "{{seconds}} 秒内未响应",
   "error.outputOpen": "无法打开文稿。{{detail}}",
   "workspace.title": "视频转文稿",
   "media.intro": "一种来源，一份文稿。链接和本地文件不会混用。",

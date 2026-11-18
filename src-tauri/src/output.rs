@@ -13,6 +13,9 @@ use serde::Deserialize;
 use tauri_plugin_opener::OpenerExt;
 use tempfile::NamedTempFile;
 
+#[cfg(all(feature = "desktop", target_os = "linux"))]
+mod linux;
+
 const MAX_TITLE_UNITS: usize = 100;
 
 #[derive(Clone, Copy, Deserialize, ValueEnum)]
@@ -295,6 +298,10 @@ pub async fn reveal_output(
     let result = if is_directory {
         opener.open_path(path, None::<&str>)
     } else {
+        #[cfg(target_os = "linux")]
+        return linux::reveal_file(target).await;
+
+        #[cfg(not(target_os = "linux"))]
         opener.reveal_item_in_dir(target)
     };
 

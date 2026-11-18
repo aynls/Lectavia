@@ -274,6 +274,8 @@
   "error.outputSave": "Could not save the document. {{detail}}",
   "error.outputGone": "The generated file or folder no longer exists.",
   "error.outputReveal": "Could not open the file’s location. {{detail}}",
+  "error.outputRevealLinux": "Could not show the document in its folder. Expand “File location” to see its path. File manager: {{primary}}; desktop portal: {{fallback}}",
+  "error.desktopServiceTimeout": "No response within {{seconds}} seconds",
   "error.outputOpen": "Could not open the document. {{detail}}",
   "workspace.title": "Video to document",
   "media.intro": "Choose a link or a local file as the video source.",
