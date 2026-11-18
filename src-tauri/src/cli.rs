@@ -12,14 +12,14 @@ use tempfile::TempDir;
 use crate::{
     error::AppError,
     locale::Locale,
-    media::{MediaSource, MediaTools, prepare_audio, remote_source},
+    media::{MediaSource, MediaTools, prepare_audio},
     models::{OrganizationOptions, organize, transcribe},
     output::{
         OutputFormat, OutputLabels, create_output_directory, validate_output_directory,
         write_output,
     },
     settings::{APP_IDENTIFIER, ModelSettings, read_model_settings},
-    video::{Video, VideoPart, inspect},
+    video::{VideoPart, choose_parts, inspect, parse_source},
 };
 
 #[derive(Parser)]
@@ -117,44 +117,9 @@ fn report(text: &str) {
     let _ = writeln!(io::stderr().lock(), "{text}");
 }
 
-fn source(input: PathBuf) -> Result<MediaSource, AppError> {
-    if let Some(link) = input.to_str().filter(|text| text.contains("://")) {
-        return remote_source(link);
-    }
-    let path = path::absolute(input).map_err(|error| AppError::detail("cli.path", error))?;
-    if !path.is_file() {
-        return Err("error.localVideoMissing".into());
-    }
-    Ok(MediaSource::Local { path })
-}
-
-fn choose_parts(video: Video, mut requested: Vec<u32>) -> Result<Vec<VideoPart>, AppError> {
-    if requested.is_empty() {
-        requested.extend(video.preferred_part);
-    }
-    if requested.is_empty() {
-        return Ok(video.parts.into_iter().take(1).collect());
-    }
-    requested.sort_unstable();
-    requested.dedup();
-    for number in &requested {
-        if !video.parts.iter().any(|part| part.number == Some(*number)) {
-            return Err(AppError::from("cli.partMissing").with("number", *number));
-        }
-    }
-    Ok(video
-        .parts
-        .into_iter()
-        .filter(|part| {
-            part.number
-                .is_some_and(|number| requested.contains(&number))
-        })
-        .collect())
-}
-
 async fn generate(args: Args) -> Result<ExitCode, AppError> {
     let locale = args.lang;
-    let source = source(args.video)?;
+    let source = parse_source(args.video)?;
     if !args.parts.is_empty() && !matches!(source, MediaSource::Bilibili { .. }) {
         return Err("cli.partsUnsupported".into());
     }

@@ -1,6 +1,8 @@
 mod cli;
 mod error;
 mod locale;
+#[cfg(feature = "mcp")]
+mod mcp;
 mod media;
 mod models;
 mod output;
@@ -12,6 +14,8 @@ mod task_runs;
 mod video;
 
 pub use cli::run as run_cli;
+#[cfg(feature = "mcp")]
+pub use mcp::run as run_mcp;
 
 #[cfg(feature = "desktop")]
 pub fn run() {

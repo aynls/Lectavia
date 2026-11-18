@@ -1,3 +1,5 @@
+use std::path::{self, PathBuf};
+
 use reqwest::Url;
 use serde_json::Value;
 
@@ -5,7 +7,7 @@ use crate::{
     error::AppError,
     media::{
         MediaSource, MediaTools, bilibili_id_query, fetch_bilibili_video, probe_video,
-        resolve_bilibili_short_link,
+        remote_source, resolve_bilibili_short_link,
     },
 };
 
@@ -20,6 +22,41 @@ pub struct VideoPart {
     pub source: MediaSource,
     pub title: Option<String>,
     pub number: Option<u32>,
+}
+
+pub fn parse_source(input: PathBuf) -> Result<MediaSource, AppError> {
+    if let Some(link) = input.to_str().filter(|text| text.contains("://")) {
+        return remote_source(link);
+    }
+    let path = path::absolute(input).map_err(|error| AppError::detail("cli.path", error))?;
+    if !path.is_file() {
+        return Err("error.localVideoMissing".into());
+    }
+    Ok(MediaSource::Local { path })
+}
+
+pub fn choose_parts(video: Video, mut requested: Vec<u32>) -> Result<Vec<VideoPart>, AppError> {
+    if requested.is_empty() {
+        requested.extend(video.preferred_part);
+    }
+    if requested.is_empty() {
+        return Ok(video.parts.into_iter().take(1).collect());
+    }
+    requested.sort_unstable();
+    requested.dedup();
+    for number in &requested {
+        if !video.parts.iter().any(|part| part.number == Some(*number)) {
+            return Err(AppError::from("cli.partMissing").with("number", *number));
+        }
+    }
+    Ok(video
+        .parts
+        .into_iter()
+        .filter(|part| {
+            part.number
+                .is_some_and(|number| requested.contains(&number))
+        })
+        .collect())
 }
 
 impl Video {
