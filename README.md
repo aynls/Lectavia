@@ -106,7 +106,7 @@ pnpm tauri build --bundles deb,appimage
 pnpm tauri build --bundles dmg
 ```
 
-FFmpeg 构建固定在 `scripts/prepare-ffmpeg.mjs`。Windows 和 Linux 使用 [FFmpeg-Builds 的 LGPL 构建](https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/tag/autobuild-2026-10-31-12-59)，macOS 使用 [dfloresc 的 Apple Silicon LGPL 构建](https://github.com/dfloresc/ffmpeg-macos-builds/releases/tag/v9.0.1-1)。安装包内的 `media-tools/ffmpeg/dist` 提供许可文本以及对应的源代码和构建信息链接。更新在线媒体工具时，在 `scripts/prepare-online-media.ps1` 和 `scripts/prepare-online-media.sh` 中更新相关版本和校验值。
+FFmpeg 构建固定在 `scripts/prepare-ffmpeg.js`。Windows 和 Linux 使用 [FFmpeg-Builds 的 LGPL 构建](https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/tag/autobuild-2026-10-31-12-59)，macOS 使用 [dfloresc 的 Apple Silicon LGPL 构建](https://github.com/dfloresc/ffmpeg-macos-builds/releases/tag/v9.0.1-1)。安装包内的 `media-tools/ffmpeg/dist` 提供许可文本以及对应的源代码和构建信息链接。更新在线媒体工具时，在 `scripts/prepare-online-media.ps1` 和 `scripts/prepare-online-media.sh` 中更新相关版本和校验值。
 
 ### GitHub 发布
 
