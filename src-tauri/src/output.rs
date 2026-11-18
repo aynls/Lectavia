@@ -5,8 +5,6 @@ use std::{
 };
 
 use crate::error::AppError;
-#[cfg(feature = "desktop")]
-use crate::task_runs::TaskRuns;
 use clap::ValueEnum;
 use serde::Deserialize;
 #[cfg(feature = "desktop")]
@@ -18,8 +16,10 @@ mod linux;
 
 const MAX_TITLE_UNITS: usize = 100;
 
-#[cfg_attr(feature = "mcp", derive(schemars::JsonSchema, serde::Serialize))]
-#[derive(Clone, Copy, Deserialize, ValueEnum)]
+#[cfg_attr(feature = "mcp", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "desktop", derive(serde::Serialize))]
+#[cfg_attr(feature = "mcp", schemars(inline))]
+#[derive(Clone, Copy, Deserialize, ValueEnum, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum OutputFormat {
     Md,
@@ -126,7 +126,6 @@ fn already_present(error: &io::Error, path: &Path) -> bool {
         || (error.kind() == io::ErrorKind::PermissionDenied && path.symlink_metadata().is_ok())
 }
 
-#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn create_output_directory(
     directory: String,
     title: String,
@@ -161,58 +160,26 @@ pub async fn write_output(
     part_index: Option<u32>,
     labels: OutputLabels,
 ) -> Result<String, AppError> {
-    write_document(
-        directory,
-        title,
-        format,
-        content,
-        part_index,
-        labels,
-        || Ok(()),
-    )
+    prepare_output(&directory, &title, &format, &content, part_index, labels)?.publish()
 }
 
-#[cfg(feature = "desktop")]
-#[tauri::command]
-pub async fn write_task_output(
-    runs: tauri::State<'_, TaskRuns>,
-    run_id: String,
-    directory: String,
-    title: String,
-    format: String,
-    content: String,
-    part_index: Option<u32>,
-    labels: OutputLabels,
-) -> Result<String, AppError> {
-    let cancellation = runs.subscribe(&run_id)?;
-    write_document(
-        directory,
-        title,
-        format,
-        content,
-        part_index,
-        labels,
-        || {
-            cancellation
-                .has_changed()
-                .map(|_| ())
-                .map_err(|_| "error.taskCancelled".into())
-        },
-    )
+pub(crate) struct PendingOutput {
+    file: NamedTempFile,
+    directory: PathBuf,
+    stem: String,
+    extension: &'static str,
 }
 
-fn write_document(
-    directory: String,
-    title: String,
-    format: String,
-    content: String,
+pub(crate) fn prepare_output(
+    directory: &str,
+    title: &str,
+    format: &str,
+    content: &str,
     part_index: Option<u32>,
     labels: OutputLabels,
-    check_active: impl Fn() -> Result<(), AppError>,
-) -> Result<String, AppError> {
-    check_active()?;
-    let directory = selected_directory(&directory)?;
-    let extension = match format.as_str() {
+) -> Result<PendingOutput, AppError> {
+    let directory = selected_directory(directory)?;
+    let extension = match format {
         "md" => ".md",
         "txt" => ".txt",
         _ => return Err("error.outputFormat".into()),
@@ -221,7 +188,7 @@ fn write_document(
         return Err("error.emptyOutput".into());
     }
 
-    let title = output_title(&title, &labels.fallback_title);
+    let title = output_title(title, &labels.fallback_title);
     let suffix = output_title(&labels.document_suffix, &labels.fallback_title);
     let stem = match part_index {
         Some(number) => format!("P{number:02}-{title}-{suffix}"),
@@ -235,18 +202,27 @@ fn write_document(
         .write_all(content.as_bytes())
         .and_then(|()| pending.as_file().sync_all())
         .map_err(|error| AppError::detail("error.outputWrite", error))?;
+    Ok(PendingOutput {
+        file: pending,
+        directory: directory.to_owned(),
+        stem,
+        extension,
+    })
+}
 
-    let mut number = 1;
-    loop {
-        let path = candidate(directory, &stem, extension, number);
-        check_active()?;
-        match pending.persist_noclobber(&path) {
-            Ok(_) => return Ok(path.to_string_lossy().into_owned()),
-            Err(error) if already_present(&error.error, &path) => {
-                pending = error.file;
-                number += 1;
+impl PendingOutput {
+    pub(crate) fn publish(mut self) -> Result<String, AppError> {
+        let mut number = 1;
+        loop {
+            let path = candidate(&self.directory, &self.stem, self.extension, number);
+            match self.file.persist_noclobber(&path) {
+                Ok(_) => return Ok(path.to_string_lossy().into_owned()),
+                Err(error) if already_present(&error.error, &path) => {
+                    self.file = error.file;
+                    number += 1;
+                }
+                Err(error) => return Err(AppError::detail("error.outputSave", error.error)),
             }
-            Err(error) => return Err(AppError::detail("error.outputSave", error.error)),
         }
     }
 }

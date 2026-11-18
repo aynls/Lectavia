@@ -9,47 +9,19 @@ use std::{
 
 use crate::{error::AppError, settings::read_audio_chunk_seconds};
 use reqwest::{Client, Url, header, redirect::Policy};
-use serde::Deserialize;
-#[cfg(feature = "desktop")]
-use serde::Serialize;
 use serde_json::Value;
 #[cfg(feature = "desktop")]
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager};
 use tempfile::TempDir;
-use tokio::{io::AsyncReadExt, sync::watch};
-
-#[cfg(feature = "desktop")]
-use crate::task_runs::TaskRuns;
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
-#[cfg(feature = "desktop")]
-use std::{collections::HashMap, sync::Mutex};
 
-#[derive(Clone, Deserialize)]
-#[serde(tag = "kind", rename_all = "lowercase")]
+#[derive(Clone)]
 pub enum MediaSource {
     Bilibili { url: String },
     Youtube { url: String },
     Local { path: PathBuf },
-}
-
-#[cfg(feature = "desktop")]
-#[derive(Serialize)]
-pub struct AudioChunks {
-    directory: PathBuf,
-    files: Vec<PathBuf>,
-}
-
-#[cfg(feature = "desktop")]
-#[derive(Default)]
-pub struct AudioCache(Mutex<HashMap<PathBuf, TempDir>>);
-
-#[cfg(feature = "desktop")]
-impl AudioCache {
-    pub fn clear(&self) {
-        self.0.lock().unwrap().clear();
-    }
 }
 
 pub struct PreparedAudio {
@@ -186,49 +158,16 @@ fn require_ffmpeg(tools: &MediaTools) -> Result<PathBuf, AppError> {
     require_tool(tools, "ffmpeg")
 }
 
-async fn process_output(
-    mut command: Command,
-    failure: &'static str,
-    cancellation: Option<&mut watch::Receiver<()>>,
-) -> Result<Output, AppError> {
+async fn process_output(mut command: Command, failure: &'static str) -> Result<Output, AppError> {
     #[cfg(windows)]
     command.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
     command.stdin(std::process::Stdio::null());
-    let output = if let Some(cancellation) = cancellation {
-        if cancellation.has_changed().is_err() {
-            return Err("error.taskCancelled".into());
-        }
-        let mut child = tokio::process::Command::from(command)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-            .map_err(|error| AppError::detail(failure, error))?;
-        let mut stderr = child.stderr.take().unwrap();
-        let mut diagnostics = Vec::new();
-        let result = tokio::select! {
-            biased;
-            _ = cancellation.changed() => {
-                let _ = child.kill().await;
-                return Err("error.taskCancelled".into());
-            }
-            result = async { tokio::try_join!(child.wait(), stderr.read_to_end(&mut diagnostics)) } => result,
-        };
-        let (status, _) = result.map_err(|error| AppError::detail(failure, error))?;
-        Output {
-            status,
-            stdout: Vec::new(),
-            stderr: diagnostics,
-        }
-    } else {
-        tokio::process::Command::from(command)
-            .kill_on_drop(true)
-            .output()
-            .await
-            .map_err(|error| AppError::detail(failure, error))?
-    };
+    let output = tokio::process::Command::from(command)
+        .kill_on_drop(true)
+        .output()
+        .await
+        .map_err(|error| AppError::detail(failure, error))?;
 
     if output.status.success() {
         return Ok(output);
@@ -340,19 +279,8 @@ pub async fn probe_video(
         command.args(["--no-playlist", "--playlist-items", "1"]);
     }
     command.arg("--").arg(url.as_str());
-    let output = process_output(command, "error.probe", None).await?;
+    let output = process_output(command, "error.probe").await?;
     serde_json::from_slice(&output.stdout).map_err(|_| "error.invalidVideoMetadata".into())
-}
-
-#[cfg(feature = "desktop")]
-#[tauri::command]
-pub async fn probe_remote_video(
-    app: AppHandle,
-    url: String,
-    youtube: bool,
-    flat: bool,
-) -> Result<Value, AppError> {
-    probe_video(&MediaTools::desktop(&app), url, youtube, flat).await
 }
 
 fn bilibili_client() -> Result<Client, AppError> {
@@ -364,7 +292,6 @@ fn bilibili_client() -> Result<Client, AppError> {
         .map_err(|error| AppError::detail("error.bilibiliDetails", error))
 }
 
-#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn fetch_bilibili_video(video_id: String) -> Result<Value, AppError> {
     let mut url = Url::parse("https://api.bilibili.com/x/web-interface/view").unwrap();
     let (key, value) = bilibili_id_query(&video_id).ok_or("error.bilibiliId")?;
@@ -398,7 +325,6 @@ pub fn bilibili_id_query(video_id: &str) -> Option<(&'static str, &str)> {
     }
 }
 
-#[cfg_attr(feature = "desktop", tauri::command)]
 pub async fn resolve_bilibili_short_link(url: String) -> Result<String, AppError> {
     let url = platform_url(&url, false)?;
     if url.host_str() != Some("b23.tv") {
@@ -420,20 +346,12 @@ pub async fn resolve_bilibili_short_link(url: String) -> Result<String, AppError
     platform_url(resolved.as_str(), false).map(|url| url.to_string())
 }
 
-#[cfg(feature = "desktop")]
-pub fn app_cache_dir(app: &AppHandle) -> Result<PathBuf, AppError> {
-    app.path()
-        .app_cache_dir()
-        .map_err(|_| "error.cacheLocation".into())
-}
-
 async fn download_audio(
     tools: &MediaTools,
     directory: &Path,
     ffmpeg: &Path,
     url: &str,
     youtube: bool,
-    cancellation: Option<&mut watch::Receiver<()>>,
 ) -> Result<PathBuf, AppError> {
     let url = platform_url(url, youtube)?;
     let mut command = yt_dlp(tools, youtube, Some(ffmpeg))?;
@@ -454,7 +372,7 @@ async fn download_audio(
         ])
         .arg("--")
         .arg(url.as_str());
-    process_output(command, "error.audioDownload", cancellation).await?;
+    process_output(command, "error.audioDownload").await?;
     list_files(directory)?
         .into_iter()
         .find(|path| path.file_stem().is_some_and(|stem| stem == "source"))
@@ -475,7 +393,6 @@ pub async fn prepare_audio(
     tools: &MediaTools,
     cache_dir: &Path,
     source: MediaSource,
-    mut cancellation: Option<&mut watch::Receiver<()>>,
 ) -> Result<PreparedAudio, AppError> {
     let chunk_seconds = read_audio_chunk_seconds().await?;
     let ffmpeg = require_ffmpeg(tools)?;
@@ -489,27 +406,11 @@ pub async fn prepare_audio(
     let directory = scratch.path();
     let (input, remove_input) = match source {
         MediaSource::Bilibili { url } => (
-            download_audio(
-                tools,
-                directory,
-                &ffmpeg,
-                &url,
-                false,
-                cancellation.as_deref_mut(),
-            )
-            .await?,
+            download_audio(tools, directory, &ffmpeg, &url, false).await?,
             true,
         ),
         MediaSource::Youtube { url } => (
-            download_audio(
-                tools,
-                directory,
-                &ffmpeg,
-                &url,
-                true,
-                cancellation.as_deref_mut(),
-            )
-            .await?,
+            download_audio(tools, directory, &ffmpeg, &url, true).await?,
             true,
         ),
         MediaSource::Local { path } => {
@@ -561,7 +462,7 @@ pub async fn prepare_audio(
     } else {
         command.arg("chunk-000000.mp3");
     }
-    process_output(command, "error.audioExtract", cancellation).await?;
+    process_output(command, "error.audioExtract").await?;
 
     if remove_input {
         fs::remove_file(input)
@@ -578,59 +479,4 @@ pub async fn prepare_audio(
     }
 
     Ok(PreparedAudio { scratch, files })
-}
-
-#[cfg(feature = "desktop")]
-#[tauri::command]
-pub async fn prepare_media_audio(
-    app: AppHandle,
-    runs: State<'_, TaskRuns>,
-    run_id: String,
-    source: MediaSource,
-) -> Result<AudioChunks, AppError> {
-    let mut cancellation = runs.subscribe(&run_id)?;
-    let tools = MediaTools::desktop(&app);
-    let cache = app_cache_dir(&app)?;
-    let audio = prepare_audio(&tools, &cache, source, Some(&mut cancellation)).await?;
-    let directory = audio.scratch.path().to_owned();
-    app.state::<AudioCache>()
-        .0
-        .lock()
-        .unwrap()
-        .insert(directory.clone(), audio.scratch);
-    Ok(AudioChunks {
-        directory,
-        files: audio.files,
-    })
-}
-
-#[cfg(feature = "desktop")]
-#[tauri::command]
-pub async fn remove_media_audio(app: AppHandle, directory: PathBuf) -> Result<(), AppError> {
-    let root = app_cache_dir(&app)?.join("media");
-    if directory.parent() != Some(root.as_path())
-        || !directory
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| name.starts_with("audio-"))
-    {
-        return Err("error.audioCleanupRestricted".into());
-    }
-
-    let scratch = app
-        .state::<AudioCache>()
-        .0
-        .lock()
-        .unwrap()
-        .remove(&directory);
-    let Some(scratch) = scratch else {
-        return Ok(());
-    };
-    tauri::async_runtime::spawn_blocking(move || match scratch.close() {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(AppError::detail("error.audioCleanup", error)),
-    })
-    .await
-    .map_err(|error| AppError::detail("error.background", error))?
 }

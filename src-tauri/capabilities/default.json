@@ -4,6 +4,8 @@
   "description": "Allow the main window to open the native file picker and HTTPS links.",
   "windows": ["main"],
   "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
     "dialog:allow-open",
     {
       "identifier": "opener:allow-open-url",

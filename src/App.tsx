@@ -28,19 +28,26 @@ import {
   type PresetDraft,
 } from "./InstructionPresetSettings";
 import { InstructionsField } from "./InstructionsField";
-import { inspectMedia, partLabel, type MediaInfo } from "./media";
+import {
+  chooseParts,
+  inspectMedia,
+  partLabel,
+  presentVideo,
+  sourceValue,
+  type MediaInfo,
+} from "./media";
 import { ModelSettings, type ModelSettingsValue } from "./ModelSettings";
 import type { ModelPurpose } from "./models";
-import { outputLanguages, type OutputLanguage } from "./output-language";
+import { outputLanguages } from "./output-language";
 import { SettingsPage } from "./SettingsPage";
 import { TaskList } from "./TaskList";
 import {
   TaskQueue,
   type PromptFile,
   type Task,
+  type TaskDraft,
   type TaskRecovery,
-  type TaskRequest,
-  type TaskRetryUpdates,
+  type OutputFormat,
 } from "./tasks";
 import { parseVideoLink, type VideoSource } from "./video-source";
 import logoUrl from "../design/lectavia-logo.svg";
@@ -53,33 +60,13 @@ type SettingsEntry =
   | {
       kind: "models";
       purpose?: ModelPurpose;
-      onRetry?: (value: ModelSettingsValue) => void;
+      onRetry?: () => Promise<void>;
     }
   | { kind: "presets"; draft: PresetDraft };
 
 const desktop = isTauri();
 const FOLDER_STORAGE_KEY = "lectavia.output-directory";
-const CONCURRENCY_STORAGE_KEY = "lectavia.max-concurrency";
-const queue = new TaskQueue(rememberedMaxConcurrency());
-
-function rememberedMaxConcurrency(): number | null {
-  try {
-    const limit = Number(localStorage.getItem(CONCURRENCY_STORAGE_KEY));
-    if (Number.isSafeInteger(limit) && limit >= 1) return limit;
-  } catch {
-    // An unavailable setting leaves concurrency unlimited.
-  }
-  return null;
-}
-
-function saveMaxConcurrency(limit: number | null): void {
-  if (limit === null) {
-    localStorage.removeItem(CONCURRENCY_STORAGE_KEY);
-  } else {
-    localStorage.setItem(CONCURRENCY_STORAGE_KEY, String(limit));
-  }
-  queue.setMaxConcurrency(limit);
-}
+const queue = new TaskQueue();
 
 function rememberedFolder(): string {
   try {
@@ -119,10 +106,8 @@ export default function App({
     desktop ? "checking" : "unselected",
   );
   const [folderError, setFolderError] = useState<Message>();
-  const [format, setFormat] = useState<"md" | "txt">("md");
-  const [outputLanguage, setOutputLanguage] = useState<
-    OutputLanguage | "application"
-  >("application");
+  const [format, setFormat] = useState<OutputFormat>("md");
+  const [outputLanguage, setOutputLanguage] = useState("application");
   const [draftInstructions, setDraftInstructions] = useState("");
   const [importedPrompt, setImportedPrompt] = useState<PromptFile | null>(null);
   const [presets, setPresets] = useState(loadInstructionPresets);
@@ -135,7 +120,7 @@ export default function App({
   const composer = useRef<HTMLElement>(null);
   const returnFocus = useRef<() => void>(undefined);
   const restoreDialog = useRef<HTMLDialogElement>(null);
-  const pendingRestoreId = useRef("");
+  const pendingRestore = useRef<TaskDraft>(undefined);
   const workspaceRevision = useRef(0);
   const linkInput = useRef<HTMLInputElement>(null);
   const requestId = useRef(0);
@@ -154,7 +139,7 @@ export default function App({
     !preset && (prompt?.content ?? instructions).trim(),
   );
   const selected = new Set(selectedParts);
-  const localMedia = media?.parts[0]?.source.kind === "local";
+  const localMedia = media?.source.kind === "local";
   const folderReady = folderStatus === "ready" && Boolean(folder);
   const modelsReady = Boolean(
     settings?.llm.model.trim() && settings.llm.apiKey.trim(),
@@ -242,9 +227,9 @@ export default function App({
     setSourceError(undefined);
   }
 
-  async function preview(source: VideoSource) {
-    const key = source.kind === "local" ? source.path : source.url;
-    if (previewKey.current === key) return;
+  async function preview(source: VideoSource, partNumbers?: number[] | null) {
+    const key = sourceValue(source);
+    if (previewKey.current === key && partNumbers === undefined) return;
 
     clearPreview();
     setFormError(undefined);
@@ -256,10 +241,7 @@ export default function App({
       const info = await inspectMedia(source);
       if (id !== requestId.current) return;
       setMedia(info);
-      const preferred =
-        info.parts.find((part) => part.id === info.preferredPartId) ??
-        info.parts[0];
-      setSelectedParts(preferred ? [preferred.id] : []);
+      setSelectedParts(chooseParts(info, partNumbers));
     } catch (error) {
       if (id !== requestId.current) return;
       previewKey.current = "";
@@ -465,33 +447,48 @@ export default function App({
     if (sourceMode === "link") linkInput.current?.focus();
   }
 
-  function restoreRequest(request: TaskRequest) {
+  function restoreRequest({ request, prompt_name, video }: TaskDraft) {
     workspaceRevision.current += 1;
-    clearPreview();
 
-    const source = request.media.parts[0].source;
+    const source = parseVideoLink(request.video) ?? {
+      kind: "local",
+      path: request.video,
+    };
     setSourceMode(source.kind === "local" ? "local" : "link");
-    setLink(request.link);
-    previewKey.current =
-      source.kind === "local" ? source.path : (request.media.sourceUrl ?? "");
-    setMedia(request.media);
-    setSelectedParts(request.selectedParts);
-    setDraftInstructions(request.instructions);
-    setImportedPrompt(request.prompt);
+    setLink(source.kind === "local" ? "" : request.video);
+    if (video) {
+      clearPreview();
+      const media = presentVideo(video, source);
+      previewKey.current = sourceValue(source);
+      setMedia(media);
+      setSelectedParts(chooseParts(media, request.parts));
+    } else {
+      void preview(source, request.parts);
+    }
+    const text = request.instructions ?? "";
+    setDraftInstructions(prompt_name ? "" : text);
+    setImportedPrompt(
+      prompt_name ? { name: prompt_name, content: text } : null,
+    );
     setPresetId("");
     setInstructionsError(undefined);
-    setFolder(request.outputDirectory);
+    setFolder(request.output_directory);
     setFolderStatus("ready");
     setFolderError(undefined);
-    setFormat(request.format);
-    setOutputLanguage(request.outputLanguage);
+    setFormat(request.format ?? "md");
+    setOutputLanguage(request.output_language ?? "application");
     setFormError(undefined);
     composer.current?.focus();
   }
 
-  function restoreTask(taskId: string) {
-    const request = queue.getRequest(taskId);
-    if (!request) return;
+  async function restoreTask(taskId: string) {
+    let draft: TaskDraft;
+    try {
+      draft = await queue.getRequest(taskId);
+    } catch (error) {
+      setFormError(errorMessage(error));
+      return;
+    }
 
     if (
       link.trim() ||
@@ -501,31 +498,28 @@ export default function App({
       presetId ||
       format !== "md" ||
       outputLanguage !== "application" ||
-      (folder && folder !== request.outputDirectory)
+      (folder && folder !== draft.request.output_directory)
     ) {
       const dialog = restoreDialog.current;
-      if (dialog) {
-        pendingRestoreId.current = taskId;
+      if (dialog && !dialog.open) {
+        pendingRestore.current = draft;
         dialog.returnValue = "";
         dialog.showModal();
       }
       return;
     }
 
-    restoreRequest(request);
+    restoreRequest(draft);
   }
 
   function finishRestore(dialog: HTMLDialogElement) {
     if (dialog.open) return;
-    const taskId = pendingRestoreId.current;
+    const draft = pendingRestore.current;
     const confirmed = dialog.returnValue === "restore";
-    pendingRestoreId.current = "";
+    pendingRestore.current = undefined;
     dialog.returnValue = "";
 
-    if (confirmed) {
-      const request = queue.getRequest(taskId);
-      if (request) restoreRequest(request);
-    }
+    if (confirmed && draft) restoreRequest(draft);
   }
 
   async function recoverTask(
@@ -538,11 +532,12 @@ export default function App({
         {
           kind: "models",
           purpose: action,
-          onRetry: (next) => {
-            const updates: TaskRetryUpdates = {};
-            if (task.recovery.includes("asr")) updates.asr = next.asr;
-            if (task.recovery.includes("llm")) updates.llm = next.llm;
-            queue.retry(task.id, updates);
+          onRetry: async () => {
+            try {
+              await queue.retry(task.id);
+            } catch (error) {
+              setFormError(errorMessage(error));
+            }
           },
         },
         onRetried,
@@ -566,36 +561,37 @@ export default function App({
     const directory = await invoke<string>("validate_output_directory", {
       directory: path,
     });
-    if (queue.retry(task.id, { outputDirectory: directory })) onRetried();
+    if (await queue.retry(task.id, { outputDirectory: directory })) onRetried();
   }
 
   async function generate() {
-    if (!canGenerate || !media || !settings) return;
+    if (!canGenerate || !media) return;
 
     const revision = workspaceRevision.current;
     setFormError(undefined);
     setFolderError(undefined);
     setQueueing(true);
     try {
-      await invoke("validate_output_directory", { directory: folder });
-      queue.enqueue({
-        link,
-        media,
-        selectedParts,
-        outputDirectory: folder,
-        locale,
-        outputLanguage:
-          outputLanguage === "application" ? locale : outputLanguage,
-        format,
-        instructions,
-        prompt,
-        ...settings,
-      });
+      const parts = media.parts.flatMap((part) =>
+        selected.has(part.id) && part.number !== undefined ? [part.number] : [],
+      );
+      await queue.enqueue(
+        {
+          request_id: crypto.randomUUID(),
+          video: sourceValue(media.source),
+          parts: parts.length ? parts : undefined,
+          output_directory: folder,
+          locale,
+          output_language:
+            outputLanguage === "application" ? locale : outputLanguage,
+          format,
+          instructions: (prompt?.content ?? instructions).trim() || undefined,
+        },
+        prompt?.name,
+      );
       if (revision === workspaceRevision.current) rememberFolder(folder);
     } catch (error) {
       if (revision !== workspaceRevision.current) return;
-      setFolderStatus("error");
-      setFolderError(message("error.unavailableFolder"));
       setFormError(message("error.generation", { cause: errorMessage(error) }));
     } finally {
       setQueueing(false);
@@ -631,11 +627,7 @@ export default function App({
         </div>
       </header>
       {settingsOpen && (
-        <SettingsPage
-          focusTitle={settingsEntry.kind === "general"}
-          initialMaxConcurrency={queue.maxConcurrency}
-          onSaveMaxConcurrency={saveMaxConcurrency}
-        >
+        <SettingsPage focusTitle={settingsEntry.kind === "general"}>
           <ModelSettings
             value={settings}
             saving={savingModels}
@@ -645,8 +637,8 @@ export default function App({
             onSave={saveModelSettings}
             onSaved={
               modelEntry
-                ? (next) => {
-                    modelEntry.onRetry?.(next);
+                ? () => {
+                    void modelEntry.onRetry?.();
                     closeSettings();
                   }
                 : undefined
@@ -1010,14 +1002,9 @@ export default function App({
                         name="output-language"
                         id="output-language"
                         value={outputLanguage}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          setOutputLanguage(
-                            outputLanguages.find(
-                              (language) => language === value,
-                            ) ?? "application",
-                          );
-                        }}
+                        onChange={(event) =>
+                          setOutputLanguage(event.target.value)
+                        }
                       >
                         <option value="application">
                           {t("output.followApplicationLanguage")}
@@ -1027,6 +1014,14 @@ export default function App({
                             {t(`outputLanguage.${language}`)}
                           </option>
                         ))}
+                        {outputLanguage !== "application" &&
+                          !outputLanguages.some(
+                            (language) => language === outputLanguage,
+                          ) && (
+                            <option value={outputLanguage}>
+                              {outputLanguage}
+                            </option>
+                          )}
                       </select>
                     </div>
                     <div className="option">
@@ -1065,7 +1060,9 @@ export default function App({
                       </dd>
                       <dt>{t("model.purpose.llm")}</dt>
                       <dd>
-                        <code>{settings.llm.model || t("model.notConfigured")}</code>
+                        <code>
+                          {settings.llm.model || t("model.notConfigured")}
+                        </code>
                       </dd>
                     </dl>
                   )}

@@ -13,7 +13,7 @@ mod output;
 mod prompt;
 mod settings;
 #[cfg(feature = "desktop")]
-mod task_runs;
+mod tasks;
 mod video;
 
 pub use cli::run as run_cli;
@@ -25,32 +25,33 @@ pub fn run() {
     use tauri::Manager;
 
     let builder = tauri::Builder::default()
-        .manage(media::AudioCache::default())
-        .manage(task_runs::TaskRuns::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init());
 
     #[cfg(feature = "mcp")]
     let builder = builder
         .plugin(tauri_plugin_clipboard_manager::init())
-        .manage(mcp::desktop::McpState::default())
-        .setup(mcp::desktop::setup);
+        .manage(mcp::desktop::McpState::default());
 
     builder
+        .setup(|app| {
+            tasks::desktop::setup(app)?;
+            #[cfg(feature = "mcp")]
+            mcp::desktop::setup(app);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
-            task_runs::begin_task_run,
-            task_runs::end_task_run,
-            media::probe_remote_video,
-            media::fetch_bilibili_video,
-            media::resolve_bilibili_short_link,
-            media::prepare_media_audio,
-            media::remove_media_audio,
+            tasks::desktop::get_max_concurrency,
+            tasks::desktop::set_max_concurrency,
+            tasks::desktop::inspect_task_video,
+            tasks::desktop::submit_task,
+            tasks::desktop::list_tasks,
+            tasks::desktop::get_task_draft,
+            tasks::desktop::cancel_task,
+            tasks::desktop::remove_tasks,
+            tasks::desktop::retry_task,
             models::list_models,
-            models::transcribe_audio,
-            models::organize_transcript,
-            output::create_output_directory,
             output::validate_output_directory,
-            output::write_task_output,
             output::open_output,
             output::reveal_output,
             prompt::choose_prompt_file,
@@ -71,7 +72,7 @@ pub fn run() {
             if matches!(event, tauri::RunEvent::Exit) {
                 #[cfg(feature = "mcp")]
                 mcp::desktop::shutdown(app);
-                app.state::<media::AudioCache>().clear();
+                tauri::async_runtime::block_on(app.state::<tasks::Tasks>().shutdown());
             }
         });
 }

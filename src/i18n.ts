@@ -73,10 +73,6 @@ void i18n.use(initReactI18next).init({
   } satisfies Record<Locale, { translation: typeof zhCN }>,
 });
 
-export function translator(locale: Locale): TFunction {
-  return i18n.getFixedT(locale);
-}
-
 export function message(key: MessageKey, values?: Message["values"]): Message {
   return { key, values };
 }

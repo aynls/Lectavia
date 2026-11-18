@@ -78,7 +78,7 @@ impl Job {
             None => report(self.locale.text(key)),
         };
         phase("task.phase.audio");
-        let audio = prepare_audio(&self.tools, self.cache.path(), part.source, None).await?;
+        let audio = prepare_audio(&self.tools, self.cache.path(), part.source).await?;
 
         phase("task.phase.transcription");
         let transcript = transcribe(self.cache.path(), &audio.files, &self.settings.asr).await;

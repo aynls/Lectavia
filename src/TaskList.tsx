@@ -21,7 +21,13 @@ import {
 } from "./tasks";
 import "./TaskList.css";
 
-const phases = ["audio", "transcription", "organization", "output"] as const;
+const documentPhases = [
+  "audio",
+  "transcription",
+  "organization",
+  "output",
+] as const;
+const transcriptPhases = ["audio", "transcription", "output"] as const;
 
 type Confirmation =
   | { kind: "clear" }
@@ -161,11 +167,18 @@ function TaskCard({
   const runningParts = task.parts.filter(
     (part) => part.status === "running",
   ).length;
-  const phase = singlePart?.status === "running" ? singlePart.phase : undefined;
+  const phase =
+    task.status === "running"
+      ? singlePart?.status === "running"
+        ? singlePart.phase
+        : task.phase
+      : undefined;
+  const phases = task.mode === "transcript" ? transcriptPhases : documentPhases;
   const stage = phases.findIndex((step) => step === phase);
   const status = t(`task.status.${task.status}`);
   const failures = task.parts.filter((part) => part.status === "failed").length;
-  const canRetry = failures > 0 && !isUnfinished(task.status);
+  const canRetry =
+    (failures > 0 || Boolean(task.error)) && !isUnfinished(task.status);
   const modelRecovery = task.recovery.find(
     (action) => action !== "outputDirectory",
   );
@@ -192,6 +205,24 @@ function TaskCard({
     return phase
       ? t("task.phaseError", { phase: t(`task.phase.${phase}`), detail })
       : detail;
+  }
+
+  async function retry(partId?: string, focusId?: string) {
+    setRecoveryError(undefined);
+    setRecovering(true);
+    try {
+      if (await queue.retry(task.id, { partId })) {
+        if (focusId) {
+          document.getElementById(focusId)?.focus({ preventScroll: true });
+        } else {
+          focusTitle();
+        }
+      }
+    } catch (error) {
+      setRecoveryError(errorMessage(error));
+    } finally {
+      setRecovering(false);
+    }
   }
 
   const actions = (
@@ -221,17 +252,16 @@ function TaskCard({
           type="button"
           className={modelRecovery || directoryRecovery ? undefined : "primary"}
           disabled={recovering}
-          onClick={() => {
-            setRecoveryError(undefined);
-            if (queue.retry(task.id)) focusTitle();
-          }}
+          onClick={() => void retry()}
         >
           {t(multipart ? "task.retry" : "task.retryStep")}
         </button>
       )}
-      <button type="button" onClick={() => onRestore(task.id)}>
-        {t("task.restore")}
-      </button>
+      {task.canRestore && (
+        <button type="button" onClick={() => onRestore(task.id)}>
+          {t("task.restore")}
+        </button>
+      )}
     </>
   );
 
@@ -291,6 +321,11 @@ function TaskCard({
             ))}
           </div>
         </div>
+      )}
+      {task.error && (
+        <p className="error task-error">
+          {describeFailure(task.error, task.phase)}
+        </p>
       )}
       {multipart ? (
         <details className="task-details">
@@ -362,14 +397,7 @@ function TaskCard({
                           type="button"
                           aria-describedby={partTitleId}
                           disabled={recovering}
-                          onClick={() => {
-                            setRecoveryError(undefined);
-                            if (queue.retryPart(task.id, part.id)) {
-                              document
-                                .getElementById(partTitleId)
-                                ?.focus({ preventScroll: true });
-                            }
-                          }}
+                          onClick={() => void retry(part.id, partTitleId)}
                         >
                           {t("task.retryStep")}
                         </button>
@@ -412,6 +440,7 @@ export function TaskList({
   const heading = useRef<HTMLHeadingElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const [confirmation, setConfirmation] = useState<Confirmation>();
+  const [actionError, setActionError] = useState<Message>();
   const orderedTasks = tasks
     .slice()
     .reverse()
@@ -426,12 +455,21 @@ export function TaskList({
     }
   }, [confirmation]);
 
+  async function runAction(action: Promise<void>) {
+    setActionError(undefined);
+    try {
+      await action;
+    } catch (error) {
+      setActionError(errorMessage(error));
+    }
+  }
+
   function closeTask(task: Task) {
     if (isUnfinished(task.status)) {
       setConfirmation({ kind: "close", taskId: task.id, title: task.title });
     } else {
       heading.current?.focus({ preventScroll: true });
-      queue.remove(task.id);
+      void runAction(queue.remove(task.id));
     }
   }
 
@@ -446,11 +484,16 @@ export function TaskList({
       document
         .getElementById(confirmation.focusId)
         ?.focus({ preventScroll: true });
-      queue.cancelPart(confirmation.taskId, confirmation.partId);
+      void runAction(
+        queue.cancelPart(confirmation.taskId, confirmation.partId),
+      );
     } else {
       heading.current?.focus({ preventScroll: true });
-      if (confirmation.kind === "clear") queue.clear();
-      else queue.remove(confirmation.taskId);
+      void runAction(
+        queue.remove(
+          confirmation.kind === "clear" ? undefined : confirmation.taskId,
+        ),
+      );
     }
   }
 
@@ -480,6 +523,11 @@ export function TaskList({
           </div>
         )}
       </header>
+      {actionError && (
+        <p className="error task-error" role="alert">
+          {renderMessage(t, actionError)}
+        </p>
+      )}
       {tasks.length === 0 ? (
         <div className="queue-empty">
           <div className="queue-empty-art" aria-hidden="true">

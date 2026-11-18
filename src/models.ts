@@ -1,6 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { message, translator, type Locale, type Message } from "./i18n";
-import type { OutputLanguage } from "./output-language";
+import { message, type Message } from "./i18n";
 
 interface ModelEndpoint {
   baseUrl: string;
@@ -31,17 +30,6 @@ interface CatalogEntry {
   id?: unknown;
   name?: unknown;
   reasoning?: { supported_efforts?: unknown; default_effort?: unknown };
-}
-
-interface OrganizationOptions {
-  connection: ModelConnection;
-  locale: Locale;
-  outputLanguage: OutputLanguage;
-  videoTitle: string;
-  partTitle?: string;
-  description?: string;
-  format: "md" | "txt";
-  instructions?: string;
 }
 
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
@@ -97,13 +85,6 @@ function normalizeEndpoint(connection: ModelEndpoint): ModelEndpoint {
   return {
     baseUrl: requireValidField(baseUrl),
     apiKey: requireValidField(apiKey),
-  };
-}
-
-function normalizeConnection(connection: ModelConnection): ModelConnection {
-  return {
-    ...normalizeEndpoint(connection),
-    model: requireValidField(modelField(connection.model)),
   };
 }
 
@@ -165,34 +146,4 @@ export async function listModels(
     }
   }
   return [...models.values()].sort((a, b) => a.name.localeCompare(b.name));
-}
-
-export function transcribeAudio(
-  files: string[],
-  connection: ModelConnection,
-  runId: string,
-): Promise<string> {
-  return invoke("transcribe_audio", {
-    files,
-    connection: normalizeConnection(connection),
-    runId,
-  });
-}
-
-export function organizeTranscript(
-  transcript: string,
-  { connection, ...options }: OrganizationOptions,
-  runId: string,
-): Promise<string> {
-  return invoke("organize_transcript", {
-    transcript,
-    options: {
-      ...options,
-      outputLanguage: translator(options.locale)(
-        `outputLanguage.${options.outputLanguage}`,
-      ),
-    },
-    connection: { ...connection, ...normalizeConnection(connection) },
-    runId,
-  });
 }

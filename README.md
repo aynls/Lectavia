@@ -31,6 +31,12 @@ pnpm tauri dev
 
 「设置 → 转写音频切片时长」可调整 ASR 每个音频分片的目标时长，默认 1200 秒（20 分钟），最短 60 秒，只接受整数。桌面端、CLI 和 MCP 在提取音频时使用同一设置。如果分片超过 25 MB，请缩短时长后重试。
 
+## MCP
+
+在桌面端「设置 → MCP 服务」开启 HTTP 或 stdio，并将对应的配置复制到 Agent。桌面和 MCP 任务出现在同一个任务列表，共用「最大并发」设置。一个普通视频或一个分 P 占用一个生成名额。
+
+Agent 可用 `inspect_video` 查看分 P，用 `generate_document` 提交任务，再凭 `job_id` 调用 `get_job` 查询状态和文件路径。生成时提供 `request_id`、`output_directory`，以及 `video` 或 `transcript_paths`。选用 `mode: "transcript"` 可把视频直接转写为逐字稿，默认保存为 `.txt`。`cancel_job` 可取消任务或指定分 P。
+
 ## 命令行
 
 在 Lectavia 桌面端保存模型设置后，用同一个系统账户运行 `lectavia-cli`。每次调用处理一个视频，桌面应用可以关闭。

@@ -39,4 +39,4 @@
 
 ## 4. 已定技术边界
 
-桌面端采用 Tauri 2、React 和 TypeScript。TypeScript 编排处理任务，Tauri 提供进程启动、文件选择和文件读写等桌面能力。
+桌面端采用 Tauri 2、React 和 TypeScript。桌面界面和 MCP 共用 Rust 任务服务及最大并发设置。

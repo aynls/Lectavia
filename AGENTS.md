@@ -1,7 +1,7 @@
 # Lectavia
 
 - Lectavia 是桌面视频转写工具。它从 Bilibili、YouTube 或本地视频提取音轨，先转写，再按用户要求整理为本地 `.md` 或 `.txt` 文稿。Bilibili 分 P 可以独立选择和生成。
-- `src/` 使用 React 和 TypeScript 实现界面与任务编排，`src/tasks.ts` 管理生成队列。`src-tauri/` 使用 Tauri 2 和 Rust 执行媒体工具、请求模型 API 和读写本地文件。
+- `src/` 使用 React 和 TypeScript 实现界面，`src/tasks.ts` 订阅任务状态。`src-tauri/src/tasks.rs` 是桌面 UI 与 MCP HTTP、stdio 共用的任务服务，负责排队、并发、取消与生成。最大并发数由桌面设置写入应用配置，对两个入口同时生效。
 - 模型连接配置（含 API Key）保存在系统凭据库中，任务队列仅保存在内存中。应用会记住界面语言和上次选择的输出目录，生成的文稿写入用户选择的目录。
 - 媒体处理使用 `yt-dlp` 和 FFmpeg。Windows x64、Linux x64 和 Apple Silicon（macOS 26 及以上）的安装包自带所需媒体工具。语音转写与文稿整理分别配置，使用 OpenAI 兼容的 `/audio/transcriptions` 和 `/chat/completions` 接口。
 - 应用文案集中维护在 `src/locales/`。新增、修改或删除界面文字、无障碍标签、弹窗、错误提示及生成文稿所用的内置文案时，同步更新简体中文（`zh-CN`）、日语（`ja`）和英语（`en`），并保持翻译键及插值参数一致。

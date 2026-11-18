@@ -1,25 +1,31 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { TFunction } from "i18next";
-import { message } from "./i18n";
 import type { VideoSource } from "./video-source";
 
-export type MediaPart = {
+type MediaPart = {
   id: string;
   title?: string;
   number?: number;
-  source: VideoSource;
 };
 
 export type MediaInfo = {
   title: string;
-  description?: string;
   uploader?: string;
   thumbnail?: string;
+  source: VideoSource;
   sourceUrl?: string;
   parts: MediaPart[];
   multipart: boolean;
   preferredPartId?: string;
 };
+
+export interface VideoPreview {
+  title: string;
+  uploader: string | null;
+  thumbnail: string | null;
+  preferred_part: number | null;
+  parts: { number: number | null; title: string | null }[];
+}
 
 export function partLabel(
   part: Pick<MediaPart, "number" | "title">,
@@ -31,213 +37,50 @@ export function partLabel(
     : t("media.part", { number: part.number });
 }
 
-export type AudioChunks = {
-  directory: string;
-  files: string[];
-};
-
-type BilibiliVideo = {
-  code: number;
-  data?: {
-    bvid: string;
-    title: string;
-    desc?: string;
-    pic?: string;
-    owner?: { name?: string };
-    pages?: { page: number; part?: string }[];
-  };
-};
-
-type VideoProbe = {
-  id?: string;
-  title?: string;
-  description?: string;
-  uploader?: string;
-  channel?: string;
-  thumbnail?: string;
-  live_status?: string;
-  entries?: { url?: string }[];
-};
-
-function thumbnailUrl(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  const url = URL.parse(value.startsWith("//") ? `https:${value}` : value);
-  if (!url || (url.protocol !== "https:" && url.protocol !== "http:")) {
-    return undefined;
-  }
-  url.protocol = "https:";
-  return url.href;
-}
-
-function ordinaryVideo(info: VideoProbe, source: VideoSource): MediaInfo {
-  const title = info.title?.trim();
-  if (!title) throw message("error.noVideoTitle");
-
-  return {
-    title,
-    description: info.description?.trim() || undefined,
-    uploader: info.uploader || info.channel,
-    thumbnail: thumbnailUrl(info.thumbnail),
-    parts: [{ id: info.id ?? "video", title, source }],
-    multipart: false,
-  };
-}
-
-function previewUrl(url: URL): string {
-  const copy = new URL(url);
-  copy.searchParams.delete("p");
-  copy.hash = "";
-  return copy.href;
-}
-
-function multipartVideo(
-  info: Omit<MediaInfo, "parts" | "multipart" | "preferredPartId">,
-  parts: MediaPart[],
-  requestedPart: string | null,
-): MediaInfo {
-  const preferredPart = parts.find(
-    (part) => part.number === Number(requestedPart),
-  );
-  return {
-    ...info,
-    parts: parts.sort((a, b) => (a.number ?? 0) - (b.number ?? 0)),
-    multipart: parts.length > 1,
-    preferredPartId: preferredPart?.id,
-  };
-}
-
-async function fallbackBilibili(url: URL, videoId: string): Promise<MediaInfo> {
-  const parentUrl = previewUrl(url);
-  const flat = await invoke<VideoProbe>("probe_remote_video", {
-    url: parentUrl,
-    youtube: false,
-    flat: true,
-  });
-  const parts: MediaPart[] = [];
-  for (const entry of flat.entries ?? []) {
-    const partUrl = entry.url ? URL.parse(entry.url) : null;
-    const number = Number(partUrl?.searchParams.get("p"));
-    if (!partUrl || !Number.isSafeInteger(number) || number < 1) continue;
-
-    parts.push({
-      id: `${videoId}:${number}`,
-      number,
-      source: { kind: "bilibili", url: partUrl.href },
-    });
-  }
-
-  const first = parts[0];
-  if (!first || first.source.kind === "local") {
-    if (flat.entries) throw message("error.unknownParts");
-    return ordinaryVideo(flat, { kind: "bilibili", url: parentUrl });
-  }
-
-  const firstInfo = await invoke<VideoProbe>("probe_remote_video", {
-    url: first.source.url,
-    youtube: false,
-    flat: false,
-  });
-  return multipartVideo(
-    {
-      title: flat.title || firstInfo.title || videoId,
-      description:
-        flat.description?.trim() || firstInfo.description?.trim() || undefined,
-      uploader: firstInfo.uploader,
-      thumbnail: thumbnailUrl(firstInfo.thumbnail),
-    },
-    parts,
-    url.searchParams.get("p"),
-  );
-}
-
-async function inspectBilibili(link: string): Promise<MediaInfo> {
-  let url = new URL(link);
-  if (url.hostname === "b23.tv") {
-    url = new URL(
-      await invoke<string>("resolve_bilibili_short_link", { url: url.href }),
-    );
-  }
-
-  const videoId = /^\/video\/(BV[a-zA-Z0-9]{10}|av\d+)\/?$/.exec(
-    url.pathname,
-  )?.[1];
-  if (!videoId) throw message("error.bilibiliPostRequired");
-
-  let response: BilibiliVideo;
-  try {
-    response = await invoke<BilibiliVideo>("fetch_bilibili_video", { videoId });
-  } catch {
-    return fallbackBilibili(url, videoId);
-  }
-  const details = response.data;
-  const pages = details?.pages;
-  if (
-    response.code !== 0 ||
-    !details?.title ||
-    !details.bvid ||
-    !Array.isArray(pages)
-  ) {
-    return fallbackBilibili(url, videoId);
-  }
-
-  const canonical = `https://www.bilibili.com/video/${details.bvid}`;
-  const parts = pages
-    .filter(({ page }) => Number.isSafeInteger(page) && page > 0)
-    .map<MediaPart>(({ page, part }) => ({
-      id: `${details.bvid}:${page}`,
-      number: page,
-      title: pages.length === 1 ? details.title : part?.trim() || undefined,
-      source: { kind: "bilibili", url: `${canonical}?p=${page}` },
-    }));
-  if (!parts.length) return fallbackBilibili(url, videoId);
-
-  return multipartVideo(
-    {
-      title: details.title,
-      description: details.desc?.trim() || undefined,
-      uploader: details.owner?.name,
-      thumbnail: thumbnailUrl(details.pic),
-    },
-    parts,
-    url.searchParams.get("p"),
-  );
+export function sourceValue(source: VideoSource): string {
+  return source.kind === "local" ? source.path : source.url;
 }
 
 export async function inspectMedia(source: VideoSource): Promise<MediaInfo> {
-  if (source.kind === "local") {
-    const name = source.path.split(/[/\\]/).at(-1) ?? "";
-    const title = name.replace(/\.[^.]+$/, "") || name;
-    return ordinaryVideo({ id: "local", title }, source);
-  }
-
-  if (source.kind === "bilibili") {
-    const info = await inspectBilibili(source.url);
-    return { ...info, sourceUrl: source.url };
-  }
-
-  const info = await invoke<VideoProbe>("probe_remote_video", {
-    url: source.url,
-    youtube: true,
-    flat: false,
+  const info = await invoke<VideoPreview>("inspect_task_video", {
+    video: sourceValue(source),
   });
-  if (
-    info.entries ||
-    info.live_status === "is_live" ||
-    info.live_status === "is_upcoming"
-  ) {
-    throw message("error.publishedYoutubeRequired");
+  return presentVideo(info, source);
+}
+
+export function presentVideo(
+  info: VideoPreview,
+  source: VideoSource,
+): MediaInfo {
+  const parts = info.parts.map((part, index) => ({
+    id: String(part.number ?? index),
+    number: part.number ?? undefined,
+    title: part.title ?? undefined,
+  }));
+  return {
+    title: info.title,
+    uploader: info.uploader ?? undefined,
+    thumbnail: info.thumbnail ?? undefined,
+    source,
+    sourceUrl: source.kind === "local" ? undefined : source.url,
+    parts,
+    multipart: parts.length > 1,
+    preferredPartId:
+      info.preferred_part === null ? undefined : String(info.preferred_part),
+  };
+}
+
+export function chooseParts(
+  media: MediaInfo,
+  numbers?: number[] | null,
+): string[] {
+  if (numbers?.length) {
+    return media.parts
+      .filter((part) => part.number && numbers.includes(part.number))
+      .map((part) => part.id);
   }
-
-  return { ...ordinaryVideo(info, source), sourceUrl: source.url };
-}
-
-export function prepareAudio(
-  part: MediaPart,
-  runId: string,
-): Promise<AudioChunks> {
-  return invoke("prepare_media_audio", { source: part.source, runId });
-}
-
-export function removeAudio(chunks: AudioChunks): Promise<void> {
-  return invoke("remove_media_audio", { directory: chunks.directory });
+  const preferred =
+    media.parts.find((part) => part.id === media.preferredPartId) ??
+    media.parts[0];
+  return preferred ? [preferred.id] : [];
 }

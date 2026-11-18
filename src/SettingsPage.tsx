@@ -1,5 +1,11 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { useRef, useState, type ReactNode, type SubmitEvent } from "react";
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type SubmitEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { AudioChunkSettings } from "./AudioChunkSettings";
 import { McpSettings } from "./McpSettings";
@@ -17,24 +23,40 @@ function focusHeading(heading: HTMLHeadingElement | null) {
 
 export function SettingsPage({
   focusTitle,
-  initialMaxConcurrency,
-  onSaveMaxConcurrency,
   children,
 }: {
   focusTitle: boolean;
-  initialMaxConcurrency: number | null;
-  onSaveMaxConcurrency: (limit: number | null) => void;
   children: ReactNode;
 }) {
   const { t } = useTranslation();
   const maxConcurrencyInput = useRef<HTMLInputElement>(null);
   const [feedback, setFeedback] = useState<MessageKey>();
+  const [concurrencyReady, setConcurrencyReady] = useState(false);
+  const [savingConcurrency, setSavingConcurrency] = useState(false);
   const invalidConcurrency = feedback === "settings.invalidConcurrency";
 
-  function saveConcurrency(event: SubmitEvent<HTMLFormElement>) {
+  useEffect(() => {
+    if (!isTauri()) return;
+    let active = true;
+    void invoke<number | null>("get_max_concurrency").then(
+      (limit) => {
+        if (!active || !maxConcurrencyInput.current) return;
+        maxConcurrencyInput.current.value = limit === null ? "" : String(limit);
+        setConcurrencyReady(true);
+      },
+      () => {
+        if (active) setFeedback("settings.loadConcurrencyFailed");
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function saveConcurrency(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const input = maxConcurrencyInput.current;
-    if (!input) return;
+    if (!input || !concurrencyReady || savingConcurrency) return;
     if (!input.validity.valid) {
       setFeedback("settings.invalidConcurrency");
       input.focus();
@@ -42,12 +64,16 @@ export function SettingsPage({
     }
 
     const limit = input.value === "" ? null : input.valueAsNumber;
+    setSavingConcurrency(true);
+    setFeedback(undefined);
     try {
-      onSaveMaxConcurrency(limit);
+      await invoke("set_max_concurrency", { limit });
       input.value = limit === null ? "" : String(limit);
       setFeedback("settings.savedConcurrency");
     } catch {
       setFeedback("settings.saveConcurrencyFailed");
+    } finally {
+      setSavingConcurrency(false);
     }
   }
 
@@ -96,7 +122,7 @@ export function SettingsPage({
                 min={1}
                 max={Number.MAX_SAFE_INTEGER}
                 step={1}
-                defaultValue={initialMaxConcurrency ?? ""}
+                disabled={!concurrencyReady || savingConcurrency}
                 placeholder={t("settings.unlimitedConcurrency")}
                 aria-invalid={invalidConcurrency || undefined}
                 aria-describedby={
@@ -104,7 +130,12 @@ export function SettingsPage({
                 }
                 onChange={() => setFeedback(undefined)}
               />
-              <button type="submit">{t("settings.save")}</button>
+              <button
+                type="submit"
+                disabled={!concurrencyReady || savingConcurrency}
+              >
+                {t("settings.save")}
+              </button>
             </div>
             {feedback && (
               <p

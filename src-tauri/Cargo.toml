@@ -22,8 +22,8 @@ crate-type = ["rlib"]
 
 [features]
 default = ["desktop", "mcp"]
-mcp = ["dep:rmcp", "dep:schemars", "dep:uuid", "dep:tokio-util", "dep:interprocess", "tokio/time"]
-desktop = ["dep:tauri", "dep:tauri-build", "dep:tauri-plugin-dialog", "dep:tauri-plugin-opener", "dep:ashpd", "tokio/time", "dep:axum", "dep:tauri-plugin-clipboard-manager", "dep:widestring", "rmcp?/transport-streamable-http-server"]
+mcp = ["dep:rmcp", "dep:schemars", "dep:interprocess", "tokio/time"]
+desktop = ["dep:tauri", "dep:tauri-build", "dep:tauri-plugin-dialog", "dep:tauri-plugin-opener", "dep:ashpd", "tokio/time", "dep:axum", "dep:tauri-plugin-clipboard-manager", "dep:widestring", "dep:uuid", "dep:tokio-util", "rmcp?/transport-streamable-http-server"]
 
 [build-dependencies]
 serde_json = "1"

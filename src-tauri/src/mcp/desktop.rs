@@ -26,8 +26,8 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use super::{Jobs, Lectavia, stdio_server::StdioServer};
-use crate::{error::AppError, media::MediaTools};
+use super::{Lectavia, stdio_server::StdioServer};
+use crate::{error::AppError, tasks::Tasks};
 
 const HOST: &str = "127.0.0.1";
 const MCP_PATH: &str = "/mcp";
@@ -139,7 +139,6 @@ struct Runtime {
     start_error: Option<AppError>,
     stdio: Option<StdioServer>,
     stdio_error: Option<AppError>,
-    jobs: Option<Jobs>,
 }
 
 impl Runtime {
@@ -153,13 +152,10 @@ impl Runtime {
         Ok(())
     }
 
-    fn handler(&mut self, app: &AppHandle) -> io::Result<Lectavia> {
-        if self.jobs.is_none() {
-            self.jobs = Some(Jobs::new(MediaTools::desktop(app))?);
+    fn handler(app: &AppHandle) -> Lectavia {
+        Lectavia {
+            tasks: app.state::<Tasks>().inner().clone(),
         }
-        Ok(Lectavia {
-            jobs: self.jobs.as_ref().expect("MCP jobs initialized").clone(),
-        })
     }
 
     async fn start(&mut self, app: &AppHandle) -> Result<(), AppError> {
@@ -171,17 +167,12 @@ impl Runtime {
                 AppError::detail("mcp.settings.startFailed", error)
             }
         })?;
-        let handler = self
-            .handler(app)
-            .map_err(|error| AppError::detail("mcp.settings.startFailed", error))?;
-        self.server = Some(Server::start(listener, handler));
+        self.server = Some(Server::start(listener, Self::handler(app)));
         Ok(())
     }
 
     fn start_stdio(&mut self, app: &AppHandle) -> Result<(), AppError> {
-        let server = self
-            .handler(app)
-            .and_then(StdioServer::start)
+        let server = StdioServer::start(Self::handler(app))
             .map_err(|error| AppError::detail("mcp.settings.stdioStartFailed", error))?;
         self.stdio = Some(server);
         Ok(())
@@ -196,15 +187,6 @@ impl Runtime {
     async fn stop_stdio(&mut self) {
         if let Some(server) = self.stdio.take() {
             server.stop().await;
-        }
-    }
-
-    async fn clear_idle_jobs(&mut self) {
-        if self.server.is_none()
-            && self.stdio.is_none()
-            && let Some(jobs) = self.jobs.take()
-        {
-            jobs.finish_shutdown().await;
         }
     }
 
@@ -242,14 +224,12 @@ impl McpState {
                     start_error: None,
                     stdio: None,
                     stdio_error: None,
-                    jobs: None,
                 };
                 if runtime.preferences.auto_start {
                     runtime.start_error = runtime.start(app).await.err();
                 }
                 if runtime.preferences.stdio_enabled {
                     runtime.stdio_error = runtime.start_stdio(app).err();
-                    runtime.clear_idle_jobs().await;
                 }
                 Ok(Mutex::new(runtime))
             })
@@ -257,12 +237,11 @@ impl McpState {
     }
 }
 
-pub(crate) fn setup(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn setup(app: &App) {
     let app = app.handle().clone();
     async_runtime::spawn(async move {
         let _ = app.state::<McpState>().runtime(&app).await;
     });
-    Ok(())
 }
 
 pub(crate) fn shutdown(app: &AppHandle) {
@@ -271,7 +250,6 @@ pub(crate) fn shutdown(app: &AppHandle) {
             let mut runtime = runtime.lock().await;
             runtime.stop_stdio().await;
             runtime.stop_http().await;
-            runtime.clear_idle_jobs().await;
         });
     }
 }
@@ -352,7 +330,6 @@ pub(crate) async fn update_mcp(
             runtime.start_error = None;
         }
     }
-    runtime.clear_idle_jobs().await;
     Ok(runtime.status())
 }
 
