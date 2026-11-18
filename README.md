@@ -95,7 +95,7 @@ Windows 上的默认产物路径为 `src-tauri/target/release/lectavia-cli.exe`�
 
 ### 平台安装包
 
-打包时会下载并校验预编译的 FFmpeg、FFprobe、Python、yt-dlp 和 QuickJS-NG。Windows 使用系统自带的 `curl.exe` 和 `tar.exe`，Linux 需要 `curl` 和 `xz-utils`，macOS 构建需要运行 macOS 26 或更高版本的 Apple Silicon Mac，以及 Xcode 命令行工具。
+打包时会下载并校验预编译的 FFmpeg、FFprobe、Python、yt-dlp 和 QuickJS-NG。Windows 使用系统自带的 `curl.exe` 和 `tar.exe`，Linux 需要 `curl`、`xz-utils` 和 `patchelf`，macOS 构建需要运行 macOS 26 或更高版本的 Apple Silicon Mac，以及 Xcode 命令行工具。
 
 ```bash
 # Windows x64
