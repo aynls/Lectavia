@@ -69,6 +69,15 @@ struct JobSelection {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+struct RetryJob {
+    /// Use a new ID for each intentional retry and the same ID for resends.
+    request_id: String,
+    #[serde(flatten)]
+    selection: JobSelection,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct ReadResult {
     /// A transcript_id or document_id returned by get_job.
     result_id: String,
@@ -91,6 +100,16 @@ fn response(result: Result<Value, AppError>) -> CallToolResult {
 
 #[tool_router]
 impl Lectavia {
+    #[tool(
+        description = "Retry failed work only, reusing any prepared audio, transcript or document. Optionally select part IDs from get_job."
+    )]
+    fn retry_job(&self, Parameters(input): Parameters<RetryJob>) -> CallToolResult {
+        response(self.jobs.retry(
+            input.request_id,
+            &input.selection.job_id,
+            input.selection.part_ids.as_deref(),
+        ))
+    }
     #[tool(
         description = "Cancel pending or running work for a job or selected parts. Completed results and files stay available."
     )]

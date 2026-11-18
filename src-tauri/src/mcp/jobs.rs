@@ -53,6 +53,19 @@ struct Registry {
     results: HashMap<String, Arc<Artifact>>,
 }
 
+impl Registry {
+    fn previous(&self, request_id: &str, fingerprint: &Value) -> Result<Option<Value>, AppError> {
+        if request_id.trim().is_empty() {
+            return Err("mcp.requestId".into());
+        }
+        match self.requests.get(request_id) {
+            Some((previous, id)) if previous == fingerprint => Ok(Some(json!({ "job_id": id }))),
+            Some(_) => Err("mcp.requestConflict".into()),
+            None => Ok(None),
+        }
+    }
+}
+
 struct Job {
     source: Source,
     document: Option<Document>,
@@ -168,6 +181,45 @@ fn new_id() -> String {
 }
 
 impl Jobs {
+    pub fn retry(
+        &self,
+        request_id: String,
+        id: &str,
+        ids: Option<&[String]>,
+    ) -> Result<Value, AppError> {
+        let fingerprint = json!({ "retry_job": id, "part_ids": ids });
+        let mut registry = self.registry.lock().unwrap();
+        if let Some(receipt) = registry.previous(&request_id, &fingerprint)? {
+            return Ok(receipt);
+        }
+        let job = registry.jobs.get(id).cloned().ok_or("mcp.jobMissing")?;
+        let mut state = job.state.lock().unwrap();
+        let selected = state.select_parts(ids)?;
+        let prepare = state.preparation.status == Status::Failed;
+        let failed: Vec<_> = selected
+            .into_iter()
+            .filter(|p| p.state.lock().unwrap().progress.status == Status::Failed)
+            .collect();
+        if !prepare && failed.is_empty() {
+            return Err("mcp.noFailedParts".into());
+        }
+        registry
+            .requests
+            .insert(request_id, (fingerprint, id.into()));
+        drop(registry);
+        if prepare {
+            state.preparation = Progress::default();
+            drop(state);
+            self.schedule_job(job);
+        } else {
+            for part in failed {
+                part.state.lock().unwrap().progress = Progress::default();
+                self.schedule_part(job.clone(), part);
+            }
+        }
+        Ok(json!({ "job_id": id }))
+    }
+
     pub fn cancel(&self, id: &str, ids: Option<&[String]>) -> Result<Value, AppError> {
         let job = self.job(id)?;
         {
@@ -275,16 +327,10 @@ impl Jobs {
         source: Source,
         document: Option<DocumentOptions>,
     ) -> Result<Value, AppError> {
-        if request_id.trim().is_empty() {
-            return Err("mcp.requestId".into());
-        }
         let fingerprint = json!({"source": source, "document": document});
         let mut registry = self.registry.lock().unwrap();
-        if let Some((previous, id)) = registry.requests.get(&request_id) {
-            if *previous != fingerprint {
-                return Err("mcp.requestConflict".into());
-            }
-            return Ok(json!({ "job_id": id }));
+        if let Some(receipt) = registry.previous(&request_id, &fingerprint)? {
+            return Ok(receipt);
         }
         let id = new_id();
         let job = Arc::new(Job {
@@ -449,7 +495,29 @@ impl Jobs {
             }
         };
         part.state.lock().unwrap().progress.running("transcription");
-        let text = transcribe(self.cache.path(), &audio.files, &settings.asr).await?;
+        let text = transcribe(self.cache.path(), &audio.files, &settings.asr)
+            .await
+            .map_err(|error| {
+                let cause = error
+                    .values
+                    .get("cause")
+                    .and_then(|cause| cause["key"].as_str());
+                if matches!(
+                    cause,
+                    Some(
+                        "error.cacheAccess"
+                            | "error.audioChunkMissing"
+                            | "error.audioChunkRestricted"
+                            | "error.audioChunkOpen"
+                            | "error.audioChunkMetadata"
+                            | "error.audioChunkEmpty"
+                            | "error.audioChunkTooLarge"
+                    )
+                ) {
+                    part.state.lock().unwrap().audio = None;
+                }
+                error
+            })?;
         let id = self.store_result(part, "transcript", text);
         let mut state = part.state.lock().unwrap();
         state.transcript_id = Some(id.clone());

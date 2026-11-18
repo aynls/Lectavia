@@ -1,4 +1,5 @@
 {
+  "mcp.noFailedParts": "選択した範囲には再試行できる失敗した処理がありません。",
   "mcp.partIds": "このジョブの有効な part_id を 1 件以上指定するか、ジョブ全体を選ぶには part_ids を省略してください。",
   "mcp.llmSettings": "Lectavia のモデル設定で文書整理を設定してください。",
   "mcp.transcriptIds": "重複のない文字起こし結果 ID を 1 件以上指定してください。",
