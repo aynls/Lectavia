@@ -90,7 +90,7 @@ impl MediaTools {
     }
 
     #[cfg(feature = "desktop")]
-    fn desktop(app: &AppHandle) -> Self {
+    pub(crate) fn desktop(app: &AppHandle) -> Self {
         Self {
             resource_dir: app.path().resource_dir().ok(),
             local_data_dir: app.path().app_local_data_dir().ok(),

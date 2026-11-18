@@ -1,14 +1,14 @@
+pub(crate) mod desktop;
 mod jobs;
+mod stdio_server;
 
 use jobs::{DocumentOptions, Jobs, Source, VideoInput};
-use std::process::ExitCode;
 
 use rmcp::{
-    ServerHandler, ServiceExt,
+    ServerHandler,
     handler::server::wrapper::Parameters,
     model::{CallToolResult, Implementation, ServerCapabilities, ServerConfig},
     tool, tool_handler, tool_router,
-    transport::stdio,
 };
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -17,7 +17,6 @@ use serde_json::{Value, json};
 use crate::{
     error::AppError,
     locale::Locale,
-    media::MediaTools,
     video::{inspect, parse_source},
 };
 
@@ -158,7 +157,8 @@ impl Lectavia {
     async fn inspect_video(&self, Parameters(input): Parameters<InspectVideo>) -> CallToolResult {
         response(
             async {
-                let video = inspect(&MediaTools::cli(), parse_source(input.video.into())?).await?;
+                let video =
+                    inspect(self.jobs.media_tools(), parse_source(input.video.into())?).await?;
                 let parts: Vec<_> = video
                     .parts
                     .iter()
@@ -184,22 +184,5 @@ impl ServerHandler for Lectavia {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_server_info(
             Implementation::new("lectavia-mcp", env!("CARGO_PKG_VERSION")),
         )
-    }
-}
-
-#[tokio::main(flavor = "current_thread")]
-pub async fn run() -> ExitCode {
-    let result: Result<(), Box<dyn std::error::Error>> = async {
-        let server = Lectavia { jobs: Jobs::new()? };
-        server.serve(stdio()).await?.waiting().await?;
-        Ok(())
-    }
-    .await;
-    match result {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            eprintln!("lectavia-mcp: {error}");
-            ExitCode::FAILURE
-        }
     }
 }

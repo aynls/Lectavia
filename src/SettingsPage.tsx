@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode, type SubmitEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { McpSettings } from "./McpSettings";
 import {
   changeLocale,
   currentLocale,
@@ -118,6 +119,7 @@ export function SettingsPage({
             )}
           </form>
         </div>
+        <McpSettings />
         {children}
       </div>
     </main>

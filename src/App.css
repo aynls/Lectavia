@@ -1207,6 +1207,185 @@ button.generate[aria-disabled="true"] {
   background: var(--surface-subtle);
 }
 
+.settings-mcp-panel {
+  container: mcp-settings / inline-size;
+}
+
+.settings-mcp-header {
+  padding-block: 1rem;
+}
+
+.settings-mcp-header h3 {
+  margin: 0;
+}
+
+.settings-mcp-transport,
+.settings-mcp-heading,
+.settings-mcp-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+}
+
+.settings-mcp-heading {
+  gap: 0.375rem 1rem;
+}
+
+.settings-mcp-transport h4 {
+  margin: 0;
+}
+
+.settings-mcp-actions {
+  justify-content: flex-end;
+  min-inline-size: 0;
+  margin-inline-start: auto;
+  column-gap: 2rem;
+}
+
+.settings-mcp-stdio {
+  border-block-start: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.settings-mcp-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.settings-mcp-status[data-running="true"] {
+  color: var(--success);
+}
+
+.settings-mcp-status::before {
+  inline-size: 0.375rem;
+  block-size: 0.375rem;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+.settings-page .settings-mcp-switch {
+  appearance: none;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  inline-size: 2.875rem;
+  block-size: 1.625rem;
+  min-block-size: 0;
+  margin: 0;
+  padding: 0.1875rem;
+  border-radius: 2rem;
+  background: var(--surface-strong);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.settings-mcp-switch::before {
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+.settings-page .settings-mcp-switch:checked {
+  justify-content: end;
+  border-color: var(--accent-text);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.settings-page .settings-mcp-switch:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--accent-text);
+}
+
+.settings-page .settings-mcp-switch:disabled {
+  cursor: not-allowed;
+}
+
+.settings-mcp-body {
+  gap: 1.125rem;
+  padding-block: 1.125rem;
+}
+
+.settings-mcp-fields {
+  display: grid;
+  gap: 0.875rem;
+}
+
+.settings-mcp-field {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.375rem 1.5rem;
+}
+
+.settings-mcp-field > .settings-mcp-note {
+  grid-column: 2;
+}
+
+.settings-page .settings-mcp-field > label {
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.settings-mcp-autostart {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-block-start: 1px solid var(--line);
+  padding-block-start: 0.875rem;
+}
+
+.settings-mcp-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem 0.75rem;
+}
+
+.settings-mcp-controls #mcp-port {
+  inline-size: 7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-mcp-controls #mcp-endpoint {
+  flex: 1 1 16rem;
+  max-inline-size: 26rem;
+  border-color: var(--line);
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+.settings-mcp-controls button {
+  min-block-size: var(--settings-control-height);
+}
+
+.settings-mcp-controls input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.settings-mcp-note {
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+@container mcp-settings (inline-size < 42rem) {
+  .settings-mcp-field {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-mcp-field > .settings-mcp-note {
+    grid-column: auto;
+  }
+}
+
 .settings-model-body {
   gap: 0;
   padding-block: 0;

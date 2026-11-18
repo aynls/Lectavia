@@ -3,7 +3,7 @@ use std::fmt::Display;
 use serde::Serialize;
 use serde_json::{Map, Value};
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct AppError {
     pub(crate) key: &'static str,
     #[serde(skip_serializing_if = "Map::is_empty")]

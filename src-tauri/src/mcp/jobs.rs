@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 use tokio::{sync::Semaphore, task::AbortHandle};
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use uuid::Uuid;
 
 use crate::{
@@ -44,6 +45,9 @@ pub(super) struct Jobs {
     registry: Arc<Mutex<Registry>>,
     cache: Arc<TempDir>,
     workers: Arc<Semaphore>,
+    tools: Arc<MediaTools>,
+    shutdown: CancellationToken,
+    tasks: TaskTracker,
 }
 
 #[derive(Default)]
@@ -313,12 +317,26 @@ impl Jobs {
         )
     }
 
-    pub fn new() -> std::io::Result<Self> {
+    pub fn new(tools: MediaTools) -> std::io::Result<Self> {
         Ok(Self {
             registry: Default::default(),
             cache: Arc::new(tempfile::tempdir()?),
             workers: Arc::new(Semaphore::new(4)),
+            tools: Arc::new(tools),
+            shutdown: CancellationToken::new(),
+            tasks: TaskTracker::new(),
         })
+    }
+
+    pub fn media_tools(&self) -> &MediaTools {
+        &self.tools
+    }
+
+    #[cfg(feature = "desktop")]
+    pub(super) async fn finish_shutdown(&self) {
+        self.shutdown.cancel();
+        self.tasks.close();
+        self.tasks.wait().await;
     }
 
     pub fn submit(
@@ -351,9 +369,13 @@ impl Jobs {
         let jobs = self.clone();
         let owner = job.clone();
         let mut state = owner.state.lock().unwrap();
-        let worker = tokio::spawn(async move {
-            job.state.lock().unwrap().preparation.running("inspect");
-            match jobs.prepare(&job).await {
+        let worker = self.tasks.spawn(async move {
+            let result = tokio::select! {
+                biased;
+                _ = jobs.shutdown.cancelled() => return,
+                result = jobs.prepare(&job) => result,
+            };
+            match result {
                 Ok(parts) => {
                     let mut state = job.state.lock().unwrap();
                     state.preparation.finish(Ok(()));
@@ -404,7 +426,7 @@ impl Jobs {
         if !input.parts.is_empty() && !matches!(source, MediaSource::Bilibili { .. }) {
             return Err("cli.partsUnsupported".into());
         }
-        let video = inspect(&MediaTools::cli(), source).await?;
+        let video = inspect(self.media_tools(), source).await?;
         let title = video.title.clone();
         let multipart = video.parts.len() > 1;
         let description = video.description.clone();
@@ -433,9 +455,15 @@ impl Jobs {
         let jobs = self.clone();
         let owner = part.clone();
         let mut state = owner.state.lock().unwrap();
-        let worker = tokio::spawn(async move {
-            let _permit = jobs.workers.acquire().await.expect("job pool stays open");
-            let result = jobs.run_part(&part, job.document.as_ref()).await;
+        let worker = self.tasks.spawn(async move {
+            let result = tokio::select! {
+                biased;
+                _ = jobs.shutdown.cancelled() => return,
+                result = async {
+                    let _permit = jobs.workers.acquire().await.expect("job pool stays open");
+                    jobs.run_part(&part, job.document.as_ref()).await
+                } => result,
+            };
             part.state.lock().unwrap().progress.finish(result);
         });
         state.progress.worker = Some(worker.abort_handle());
@@ -483,7 +511,7 @@ impl Jobs {
                 part.state.lock().unwrap().progress.running("audio");
                 let audio = Arc::new(
                     prepare_audio(
-                        &MediaTools::cli(),
+                        self.media_tools(),
                         self.cache.path(),
                         part.info.source.clone(),
                         None,

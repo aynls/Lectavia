@@ -3,6 +3,7 @@ import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 import { BookmarkSimpleIcon } from "@phosphor-icons/react/dist/csr/BookmarkSimple";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
+import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
 import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
 import { FilmStripIcon } from "@phosphor-icons/react/dist/csr/FilmStrip";
 import { FloppyDiskIcon } from "@phosphor-icons/react/dist/csr/FloppyDisk";
@@ -33,6 +34,7 @@ const icons = {
   plus: PlusIcon,
   settings: SlidersHorizontalIcon,
   check: CheckCircleIcon,
+  copy: CopyIcon,
   upload: UploadSimpleIcon,
   warning: WarningCircleIcon,
   close: XIcon,
