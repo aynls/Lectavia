@@ -1,5 +1,7 @@
+import { isTauri } from "@tauri-apps/api/core";
 import { useRef, useState, type ReactNode, type SubmitEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { AudioChunkSettings } from "./AudioChunkSettings";
 import { McpSettings } from "./McpSettings";
 import {
   changeLocale,
@@ -85,7 +87,7 @@ export function SettingsPage({
                 {t("settings.maxConcurrency")}
               </label>
             </div>
-            <div className="settings-concurrency-controls">
+            <div className="settings-row-controls">
               <input
                 id="max-concurrency"
                 name="max-concurrency"
@@ -108,7 +110,9 @@ export function SettingsPage({
               <p
                 id="max-concurrency-feedback"
                 className={
-                  feedback === "settings.savedConcurrency" ? "muted" : "error"
+                  feedback === "settings.savedConcurrency"
+                    ? "settings-row-feedback muted"
+                    : "settings-row-feedback error"
                 }
                 role={
                   feedback === "settings.savedConcurrency" ? "status" : "alert"
@@ -118,6 +122,7 @@ export function SettingsPage({
               </p>
             )}
           </form>
+          {isTauri() && <AudioChunkSettings />}
         </div>
         <McpSettings />
         {children}

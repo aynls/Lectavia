@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use crate::error::AppError;
+use crate::{error::AppError, settings::read_audio_chunk_seconds};
 use reqwest::{Client, Url, header, redirect::Policy};
 use serde::Deserialize;
 #[cfg(feature = "desktop")]
@@ -477,6 +477,7 @@ pub async fn prepare_audio(
     source: MediaSource,
     mut cancellation: Option<&mut watch::Receiver<()>>,
 ) -> Result<PreparedAudio, AppError> {
+    let chunk_seconds = read_audio_chunk_seconds().await?;
     let ffmpeg = require_ffmpeg(tools)?;
     let root = cache_dir.join("media");
     fs::create_dir_all(root.as_path())
@@ -519,7 +520,6 @@ pub async fn prepare_audio(
         }
     };
 
-    // Keep chunks below five minutes, including the encoder's frame alignment.
     let mut command = Command::new(&ffmpeg);
     command
         .current_dir(directory)
@@ -547,14 +547,20 @@ pub async fn prepare_audio(
             "libmp3lame",
             "-b:a",
             "64k",
+        ]);
+    if let Some(seconds) = chunk_seconds.ffmpeg_segment_time() {
+        command.args([
             "-f",
             "segment",
             "-segment_time",
-            "240",
+            seconds,
             "-reset_timestamps",
             "1",
             "chunk-%06d.mp3",
         ]);
+    } else {
+        command.arg("chunk-000000.mp3");
+    }
     process_output(command, "error.audioExtract", cancellation).await?;
 
     if remove_input {

@@ -1,3 +1,5 @@
+use std::{io, path::PathBuf};
+
 use crate::error::AppError;
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
@@ -5,6 +7,78 @@ use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
 pub const APP_IDENTIFIER: &str = env!("LECTAVIA_APP_IDENTIFIER");
+const DEFAULT_AUDIO_CHUNK_SECONDS: &str = "1200";
+const MIN_AUDIO_CHUNK_SECONDS: u64 = 60;
+
+pub struct AudioChunkSeconds(String);
+
+impl AudioChunkSeconds {
+    fn parse(value: &str) -> Result<Self, AppError> {
+        let seconds = value.trim().trim_start_matches('0');
+        if seconds.is_empty()
+            || !seconds.bytes().all(|digit| digit.is_ascii_digit())
+            || seconds
+                .parse::<u64>()
+                .is_ok_and(|value| value < MIN_AUDIO_CHUNK_SECONDS)
+        {
+            return Err("settings.invalidAudioChunkSeconds".into());
+        }
+        Ok(Self(seconds.to_owned()))
+    }
+
+    pub fn ffmpeg_segment_time(&self) -> Option<&str> {
+        // FFmpeg represents segment durations as signed 64-bit microseconds.
+        // A longer interval cannot split an audio stream on that time scale.
+        const MAX_SECONDS: u64 = i64::MAX as u64 / 1_000_000;
+        self.0
+            .parse::<u64>()
+            .ok()
+            .filter(|&seconds| seconds <= MAX_SECONDS)
+            .map(|_| self.0.as_str())
+    }
+}
+
+fn audio_chunk_seconds_path() -> Result<PathBuf, AppError> {
+    dirs::config_dir()
+        .map(|dir| dir.join(APP_IDENTIFIER).join("audio-chunk-seconds"))
+        .ok_or_else(|| "error.loadAudioChunkSeconds".into())
+}
+
+pub async fn read_audio_chunk_seconds() -> Result<AudioChunkSeconds, AppError> {
+    match tokio::fs::read_to_string(audio_chunk_seconds_path()?).await {
+        Ok(value) => AudioChunkSeconds::parse(&value),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            Ok(AudioChunkSeconds(DEFAULT_AUDIO_CHUNK_SECONDS.to_owned()))
+        }
+        Err(_) => Err("error.loadAudioChunkSeconds".into()),
+    }
+}
+
+#[cfg(feature = "desktop")]
+#[tauri::command]
+pub async fn load_audio_chunk_seconds() -> Result<String, AppError> {
+    Ok(read_audio_chunk_seconds().await?.0)
+}
+
+#[cfg(feature = "desktop")]
+#[tauri::command]
+pub async fn save_audio_chunk_seconds(seconds: String) -> Result<String, AppError> {
+    use std::{fs, io::Write};
+
+    let seconds = AudioChunkSeconds::parse(&seconds)?.0;
+    let path = audio_chunk_seconds_path().map_err(|_| "error.saveAudioChunkSeconds")?;
+    tokio::task::spawn_blocking(move || {
+        let directory = path.parent().expect("settings file has a parent directory");
+        fs::create_dir_all(directory)?;
+        let mut file = tempfile::NamedTempFile::new_in(directory)?;
+        file.write_all(seconds.as_bytes())?;
+        file.persist(path).map_err(|error| error.error)?;
+        Ok::<_, io::Error>(seconds)
+    })
+    .await
+    .map_err(|_| "error.saveAudioChunkSeconds")?
+    .map_err(|_| "error.saveAudioChunkSeconds".into())
+}
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
