@@ -1,4 +1,6 @@
 {
+  "mcp.resultMissing": "当前服务进程中找不到此结果。",
+  "mcp.page": "分页参数无效。请使用返回的 next_cursor，并将 limit 设为 1 至 16000 个字符。",
   "mcp.jobMissing": "当前服务进程中找不到此任务。",
   "mcp.requestId": "请提供非空的 request_id。",
   "mcp.requestConflict": "此 request_id 已用于其他请求。",

@@ -119,6 +119,33 @@ fn new_id() -> String {
 }
 
 impl Jobs {
+    fn artifact(&self, id: &str) -> Result<Arc<Artifact>, AppError> {
+        self.registry
+            .lock()
+            .unwrap()
+            .results
+            .get(id)
+            .cloned()
+            .ok_or_else(|| "mcp.resultMissing".into())
+    }
+
+    pub fn read(&self, id: &str, cursor: usize, limit: usize) -> Result<Value, AppError> {
+        let result = self.artifact(id)?;
+        let remaining = result.text.get(cursor..).ok_or("mcp.page")?;
+        if !(1..=16000).contains(&limit) {
+            return Err("mcp.page".into());
+        }
+        let end = remaining
+            .char_indices()
+            .nth(limit)
+            .map(|(offset, _)| cursor + offset);
+        Ok(json!({
+            "result_id":id, "kind":"transcript", "video_title":result.info.video_title,
+            "part_title": result.info.title, "number":result.info.number,
+            "text": &result.text[cursor..end.unwrap_or(result.text.len())], "next_cursor":end,
+        }))
+    }
+
     fn job(&self, id: &str) -> Result<Arc<Job>, AppError> {
         self.registry
             .lock()

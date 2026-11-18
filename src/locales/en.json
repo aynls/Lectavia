@@ -1,4 +1,6 @@
 {
+  "mcp.resultMissing": "Unknown result_id in this server process.",
+  "mcp.page": "Invalid cursor or page size. Use the returned next_cursor and a limit of 1–16000 characters.",
   "mcp.jobMissing": "Unknown job_id in this server process.",
   "mcp.requestId": "Provide a nonempty request_id.",
   "mcp.requestConflict": "This request_id already belongs to a different request.",

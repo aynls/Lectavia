@@ -48,6 +48,18 @@ struct JobId {
     job_id: String,
 }
 
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ReadResult {
+    /// A transcript_id or document_id returned by get_job.
+    result_id: String,
+    /// Omit on the first page, then pass the exact next_cursor.
+    cursor: Option<usize>,
+    /// Maximum Unicode characters on this page (default 4000).
+    #[schemars(range(min = 1, max = 16000))]
+    limit: Option<usize>,
+}
+
 fn response(result: Result<Value, AppError>) -> CallToolResult {
     match result {
         Ok(value) => CallToolResult::structured(value),
@@ -60,6 +72,16 @@ fn response(result: Result<Value, AppError>) -> CallToolResult {
 
 #[tool_router]
 impl Lectavia {
+    #[tool(
+        description = "Read one page of a transcript or document. Continue with next_cursor until it is null."
+    )]
+    fn read_result(&self, Parameters(input): Parameters<ReadResult>) -> CallToolResult {
+        response(self.jobs.read(
+            &input.result_id,
+            input.cursor.unwrap_or(0),
+            input.limit.unwrap_or(4000),
+        ))
+    }
     #[tool(
         description = "Get job status, current phase, and the status, results and errors of each selected part."
     )]
