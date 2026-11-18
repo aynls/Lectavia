@@ -46,10 +46,19 @@ function firstInvalidField(errors: ModelConnectionErrors) {
   return connectionFields.find((field) => errors[field]);
 }
 
-function validateSettings(value: ModelSettingsValue): SettingsErrors {
+function needsOrganizationModel(value: ModelSettingsValue, required: boolean) {
+  return required || Boolean(value.llm.apiKey.trim() || value.llm.model.trim());
+}
+
+function validateSettings(
+  value: ModelSettingsValue,
+  requireOrganization: boolean,
+): SettingsErrors {
   return {
     asr: validateModelConnection(value.asr),
-    llm: validateModelConnection(value.llm),
+    llm: needsOrganizationModel(value, requireOrganization)
+      ? validateModelConnection(value.llm)
+      : {},
   };
 }
 
@@ -130,6 +139,7 @@ function ProviderFields({
   setConnection,
   onLoadingChange,
   purpose,
+  required,
 }: {
   connection: ModelConnection;
   errors?: ModelConnectionErrors;
@@ -139,6 +149,7 @@ function ProviderFields({
   ) => void;
   onLoadingChange: (purpose: ModelPurpose, loading: boolean) => void;
   purpose: ModelPurpose;
+  required: boolean;
 }) {
   const { t } = useTranslation();
   const id = useId();
@@ -291,7 +302,7 @@ function ProviderFields({
             name={id + "-url"}
             type="url"
             value={connection.baseUrl}
-            required
+            required={required}
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
@@ -308,7 +319,7 @@ function ProviderFields({
             type="password"
             autoComplete="off"
             value={connection.apiKey}
-            required
+            required={required}
             {...inputState("apiKey")}
             onChange={(event) => editEndpoint("apiKey", event.target.value)}
           />
@@ -326,7 +337,7 @@ function ProviderFields({
                 className="settings-model-select"
                 id={id + "-model"}
                 name={id + "-model"}
-                required
+                required={required}
                 value={modelId ? `model:${modelId}` : ""}
                 {...inputState("model")}
                 onChange={(event) => {
@@ -368,7 +379,7 @@ function ProviderFields({
                 name={id + "-model"}
                 value={connection.model}
                 autoFocus={manualModel && models.length > 0}
-                required
+                required={required}
                 placeholder={t("model.idPlaceholder")}
                 autoCapitalize="none"
                 autoCorrect="off"
@@ -451,9 +462,10 @@ export function ModelSettings({
   const [draft, setDraft] = useState(savedValue);
   const [error, setError] = useState<Message>();
   const [validation, setValidation] = useState<SettingsErrors>();
+  const requireOrganization = retryAfterSave || purpose === "llm";
   const [focus, setFocus] = useState<ModelSettingsFocus | undefined>(() => {
     if (!focusOnOpen) return;
-    const errors = validateSettings(savedValue);
+    const errors = validateSettings(savedValue, requireOrganization);
     if (purpose) {
       return {
         purpose,
@@ -514,7 +526,7 @@ export function ModelSettings({
     event.preventDefault();
     if (saving || loading) return;
 
-    const errors = validateSettings(draft);
+    const errors = validateSettings(draft, requireOrganization);
     const invalidField = firstInvalidSetting(errors);
     if (invalidField) {
       setError(undefined);
@@ -592,6 +604,10 @@ export function ModelSettings({
                 }))
               }
               purpose={purpose}
+              required={
+                purpose === "asr" ||
+                needsOrganizationModel(draft, requireOrganization)
+              }
             />
           ))}
         </fieldset>

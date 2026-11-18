@@ -473,7 +473,7 @@ impl Jobs {
         let settings = read_model_settings(APP_IDENTIFIER.to_owned())
             .await?
             .ok_or("mcp.asrSettings")?;
-        if settings.asr.api_key.trim().is_empty() || settings.asr.model.trim().is_empty() {
+        if !settings.asr.is_configured() {
             return Err("mcp.asrSettings".into());
         }
         let cached = part.state.lock().unwrap().audio.clone();

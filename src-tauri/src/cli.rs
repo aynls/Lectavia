@@ -137,6 +137,7 @@ async fn generate(args: Args) -> Result<ExitCode, AppError> {
     };
     let settings = read_model_settings(APP_IDENTIFIER.to_owned())
         .await?
+        .filter(|settings| settings.asr.is_configured() && settings.llm.is_configured())
         .ok_or("cli.settingsMissing")?;
     let tools = MediaTools::cli();
     report(locale.text("cli.inspect"));

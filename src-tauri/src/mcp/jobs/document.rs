@@ -56,7 +56,7 @@ impl Document {
         let settings = read_model_settings(APP_IDENTIFIER.to_owned())
             .await?
             .ok_or("mcp.llmSettings")?;
-        if settings.llm.api_key.trim().is_empty() || settings.llm.model.trim().is_empty() {
+        if !settings.llm.is_configured() {
             return Err("mcp.llmSettings".into());
         }
         let options = OrganizationOptions {

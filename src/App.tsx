@@ -156,6 +156,9 @@ export default function App({
   const selected = new Set(selectedParts);
   const localMedia = media?.parts[0]?.source.kind === "local";
   const folderReady = folderStatus === "ready" && Boolean(folder);
+  const modelsReady = Boolean(
+    settings?.llm.model.trim() && settings.llm.apiKey.trim(),
+  );
   const canGenerate = Boolean(
     desktop &&
     !previewing &&
@@ -163,7 +166,7 @@ export default function App({
     media &&
     selected.size &&
     folderReady &&
-    settings,
+    modelsReady,
   );
 
   const missing: string[] = [];
@@ -1062,7 +1065,7 @@ export default function App({
                       </dd>
                       <dt>{t("model.purpose.llm")}</dt>
                       <dd>
-                        <code>{settings.llm.model}</code>
+                        <code>{settings.llm.model || t("model.notConfigured")}</code>
                       </dd>
                     </dl>
                   )}
@@ -1074,13 +1077,14 @@ export default function App({
                       </p>
                     </div>
                   )}
-                  {desktop && !settings && (
+                  {desktop && !modelsReady && (
                     <button
                       type="button"
                       className="quiet readiness-action"
                       onClick={() =>
-                        openSettings({ kind: "models" }, () =>
-                          composer.current?.focus(),
+                        openSettings(
+                          { kind: "models", purpose: settings ? "llm" : "asr" },
+                          () => composer.current?.focus(),
                         )
                       }
                     >

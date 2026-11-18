@@ -21,6 +21,12 @@ pub struct ModelConnection {
 }
 
 impl ModelConnection {
+    pub fn is_configured(&self) -> bool {
+        !self.base_url.trim().is_empty()
+            && !self.api_key.trim().is_empty()
+            && !self.model.trim().is_empty()
+    }
+
     pub fn selected_reasoning_effort(&self) -> Option<&str> {
         self.reasoning_effort
             .as_ref()
