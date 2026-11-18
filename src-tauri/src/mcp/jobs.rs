@@ -11,7 +11,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tempfile::TempDir;
-use tokio::sync::Semaphore;
+use tokio::{sync::Semaphore, task::AbortHandle};
 use uuid::Uuid;
 
 use crate::{
@@ -73,6 +73,7 @@ enum Status {
     Running,
     Completed,
     Failed,
+    Cancelled,
 }
 
 #[derive(Default)]
@@ -80,15 +81,27 @@ struct Progress {
     status: Status,
     phase: Option<&'static str>,
     error: Option<AppError>,
+    worker: Option<AbortHandle>,
 }
 
 impl Progress {
+    fn cancel(&mut self) {
+        if matches!(self.status, Status::Queued | Status::Running) {
+            if let Some(worker) = self.worker.take() {
+                worker.abort();
+            }
+            self.status = Status::Cancelled;
+            self.phase = None;
+        }
+    }
+
     fn running(&mut self, phase: &'static str) {
         self.status = Status::Running;
         self.phase = Some(phase);
     }
 
     fn finish(&mut self, outcome: Result<(), AppError>) {
+        self.worker = None;
         match outcome {
             Ok(()) => {
                 self.status = Status::Completed;
@@ -99,6 +112,23 @@ impl Progress {
                 self.error = Some(error);
             }
         }
+    }
+}
+
+impl JobState {
+    fn select_parts(&self, ids: Option<&[String]>) -> Result<Vec<Arc<Part>>, AppError> {
+        if let Some(ids) = ids {
+            if ids.is_empty() || ids.iter().any(|id| !self.parts.iter().any(|p| p.id == *id)) {
+                return Err("mcp.partIds".into());
+            }
+            return Ok(self
+                .parts
+                .iter()
+                .filter(|p| ids.contains(&p.id))
+                .cloned()
+                .collect());
+        }
+        Ok(self.parts.clone())
     }
 }
 
@@ -138,6 +168,25 @@ fn new_id() -> String {
 }
 
 impl Jobs {
+    pub fn cancel(&self, id: &str, ids: Option<&[String]>) -> Result<Value, AppError> {
+        let job = self.job(id)?;
+        {
+            let mut state = job.state.lock().unwrap();
+            let selected = state.select_parts(ids)?;
+            if ids.is_none() {
+                state.preparation.cancel();
+            }
+            for part in selected {
+                let mut state = part.state.lock().unwrap();
+                state.progress.cancel();
+                if state.progress.status == Status::Cancelled {
+                    state.audio = None;
+                }
+            }
+        }
+        self.snapshot(id)
+    }
+
     fn artifact(&self, id: &str) -> Result<Arc<Artifact>, AppError> {
         self.registry
             .lock()
@@ -201,8 +250,10 @@ impl Jobs {
             json!(Status::Completed)
         } else if statuses.contains(&Status::Completed) {
             json!("partial")
-        } else {
+        } else if statuses.contains(&Status::Failed) {
             json!(Status::Failed)
+        } else {
+            json!(Status::Cancelled)
         };
         Ok(
             json!({"job_id":id,"status":status,"phase":state.preparation.phase,
@@ -252,7 +303,9 @@ impl Jobs {
 
     fn schedule_job(&self, job: Arc<Job>) {
         let jobs = self.clone();
-        tokio::spawn(async move {
+        let owner = job.clone();
+        let mut state = owner.state.lock().unwrap();
+        let worker = tokio::spawn(async move {
             job.state.lock().unwrap().preparation.running("inspect");
             match jobs.prepare(&job).await {
                 Ok(parts) => {
@@ -266,6 +319,7 @@ impl Jobs {
                 Err(error) => job.state.lock().unwrap().preparation.finish(Err(error)),
             }
         });
+        state.preparation.worker = Some(worker.abort_handle());
     }
 
     async fn prepare(&self, job: &Job) -> Result<Vec<Arc<Part>>, AppError> {
@@ -331,11 +385,14 @@ impl Jobs {
 
     fn schedule_part(&self, job: Arc<Job>, part: Arc<Part>) {
         let jobs = self.clone();
-        tokio::spawn(async move {
+        let owner = part.clone();
+        let mut state = owner.state.lock().unwrap();
+        let worker = tokio::spawn(async move {
             let _permit = jobs.workers.acquire().await.expect("job pool stays open");
             let result = jobs.run_part(&part, job.document.as_ref()).await;
             part.state.lock().unwrap().progress.finish(result);
         });
+        state.progress.worker = Some(worker.abort_handle());
     }
 
     async fn run_part(&self, part: &Part, document: Option<&Document>) -> Result<(), AppError> {

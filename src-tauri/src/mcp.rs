@@ -61,6 +61,14 @@ struct JobId {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+struct JobSelection {
+    job_id: String,
+    /// Part IDs from get_job. Omit to select the whole job.
+    part_ids: Option<Vec<String>>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct ReadResult {
     /// A transcript_id or document_id returned by get_job.
     result_id: String,
@@ -83,6 +91,12 @@ fn response(result: Result<Value, AppError>) -> CallToolResult {
 
 #[tool_router]
 impl Lectavia {
+    #[tool(
+        description = "Cancel pending or running work for a job or selected parts. Completed results and files stay available."
+    )]
+    fn cancel_job(&self, Parameters(input): Parameters<JobSelection>) -> CallToolResult {
+        response(self.jobs.cancel(&input.job_id, input.part_ids.as_deref()))
+    }
     #[tool(
         description = "Generate md or txt files from a video or existing transcripts. Returns job_id. Poll get_job for file paths and document IDs."
     )]

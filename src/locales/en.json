@@ -1,4 +1,5 @@
 {
+  "mcp.partIds": "Provide one or more part_id values from this job, or omit part_ids for the whole job.",
   "mcp.llmSettings": "Set up document organization in Lectavia’s model settings.",
   "mcp.transcriptIds": "Provide a nonempty list of unique transcript IDs.",
   "mcp.transcriptRequired": "This result is not a raw transcript.",

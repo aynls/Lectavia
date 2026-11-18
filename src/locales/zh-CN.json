@@ -1,4 +1,5 @@
 {
+  "mcp.partIds": "请使用此任务中至少一个有效的 part_id，或省略 part_ids 以选择整个任务。",
   "mcp.llmSettings": "请在 Lectavia 的模型设置中配置文稿整理。",
   "mcp.transcriptIds": "请提供至少一个转写结果 ID，并移除重复项。",
   "mcp.transcriptRequired": "此结果不是原始转写稿。",
