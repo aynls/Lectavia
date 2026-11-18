@@ -61,7 +61,11 @@ impl Lectavia {
     }
 
     #[tool(
-        description = "Generate local md or txt files. Supply video (with optional Bilibili parts) or transcript_paths. Use transcript mode for speech recognition only. Returns job_id immediately. Poll get_job for output paths and read the files directly."
+        description = "Generate local md or txt files. Supply video (with optional Bilibili parts) or transcript_paths. \
+                       Document mode automatically uses Lectavia's built-in editing prompt. Pass instructions only \
+                       when the user asks for extra editing requirements. For speech recognition only, use transcript \
+                       mode and omit instructions. Returns job_id immediately. Poll get_job for output paths and read \
+                       the files directly."
     )]
     fn generate_document(
         &self,

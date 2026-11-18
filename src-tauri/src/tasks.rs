@@ -55,7 +55,8 @@ pub(crate) struct GenerationRequest {
     pub locale: Option<Locale>,
     /// Target language for the organized document. Defaults to locale.
     pub output_language: Option<String>,
-    /// Additional instructions for organizing the document.
+    /// Optional. Adds the user's extra requirements, such as section structure or tone, to
+    /// Lectavia's built-in editing prompt. Omit for standard generation and in transcript mode.
     pub instructions: Option<String>,
 }
 
