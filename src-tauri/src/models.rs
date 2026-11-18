@@ -19,7 +19,6 @@ use tauri::{AppHandle, State};
 use tokio::fs::{self, File};
 
 const MAX_AUDIO_BYTES: u64 = 25_000_000;
-const SECTION_SIZE: usize = 5_000;
 
 static CLIENT: OnceLock<Result<Client, reqwest::Error>> = OnceLock::new();
 
@@ -310,33 +309,6 @@ pub struct OrganizationOptions {
     pub instructions: Option<String>,
 }
 
-fn section_end(text: &str) -> usize {
-    let mut units = 0;
-    let mut sentence_end = None;
-    let mut word_end = None;
-    for (index, character) in text.char_indices() {
-        let width = character.len_utf16();
-        if units + width > SECTION_SIZE {
-            return sentence_end.or(word_end).unwrap_or(index);
-        }
-        if units >= SECTION_SIZE / 2 {
-            let end = index + character.len_utf8();
-            if matches!(character, '\n' | '。' | '！' | '？')
-                || (matches!(character, '!' | '?' | '.')
-                    && units + 1 < SECTION_SIZE
-                    && text[end..].starts_with(' '))
-            {
-                sentence_end = Some(end);
-            }
-            if character == ' ' {
-                word_end = Some(end);
-            }
-        }
-        units += width;
-    }
-    text.len()
-}
-
 fn organization_prompt(options: &OrganizationOptions) -> String {
     let locale = options.locale;
     let language = options.output_language.as_deref().unwrap_or_else(|| {
@@ -367,74 +339,59 @@ fn organization_prompt(options: &OrganizationOptions) -> String {
 }
 
 pub async fn organize(
-    mut transcript: &str,
+    transcript: &str,
     connection: &ModelConnection,
     options: &OrganizationOptions,
 ) -> Result<String, AppError> {
-    let mut sections = Vec::new();
-    while !transcript.is_empty() {
-        let (section, rest) = transcript.split_at(section_end(transcript));
-        if !section.trim().is_empty() {
-            sections.push(section.trim());
-        }
-        transcript = rest;
-    }
-    if sections.is_empty() {
+    if transcript.trim().is_empty() {
         return Err("error.emptyTranscript".into());
     }
 
-    let system_prompt = organization_prompt(options);
-    let mut material = Vec::new();
-    for (index, section) in sections.iter().enumerate() {
-        let mut source = json!({
-            "videoTitle": options.video_title,
-            "section": index + 1,
-            "sectionCount": sections.len(),
-            "transcript": section,
-        });
-        if let Some(part_title) = &options.part_title {
-            source["partTitle"] = json!(part_title);
-        }
-        if let Some(description) = &options.description {
-            source["description"] = json!(description);
-        }
-
-        let response = complete_text(
-            connection,
-            vec![
-                ChatMessage {
-                    role: ChatRole::System,
-                    content: system_prompt.clone(),
-                },
-                ChatMessage {
-                    role: ChatRole::User,
-                    content: source.to_string(),
-                },
-            ],
-        )
-        .await?;
-        let choice = &response["choices"][0];
-        let finish_reason = choice["finish_reason"].as_str().unwrap_or_default();
-        if finish_reason == "length" {
-            return Err("error.outputLength".into());
-        }
-        if finish_reason == "content_filter"
-            || choice["message"]["refusal"]
-                .as_str()
-                .is_some_and(|refusal| !refusal.is_empty())
-        {
-            return Err("error.modelRefusal".into());
-        }
-        let content = choice["message"]["content"]
-            .as_str()
-            .unwrap_or_default()
-            .trim();
-        if !matches!(finish_reason, "" | "stop") || content.is_empty() {
-            return Err("error.modelEmpty".into());
-        }
-        material.push(content.to_owned());
+    let mut source = json!({
+        "videoTitle": options.video_title,
+        "transcript": transcript,
+    });
+    if let Some(part_title) = &options.part_title {
+        source["partTitle"] = json!(part_title);
     }
-    Ok(material.join("\n\n") + "\n")
+    if let Some(description) = &options.description {
+        source["description"] = json!(description);
+    }
+
+    let response = complete_text(
+        connection,
+        vec![
+            ChatMessage {
+                role: ChatRole::System,
+                content: organization_prompt(options),
+            },
+            ChatMessage {
+                role: ChatRole::User,
+                content: source.to_string(),
+            },
+        ],
+    )
+    .await?;
+    let choice = &response["choices"][0];
+    let finish_reason = choice["finish_reason"].as_str().unwrap_or_default();
+    if finish_reason == "length" {
+        return Err("error.outputLength".into());
+    }
+    if finish_reason == "content_filter"
+        || choice["message"]["refusal"]
+            .as_str()
+            .is_some_and(|refusal| !refusal.is_empty())
+    {
+        return Err("error.modelRefusal".into());
+    }
+    let content = choice["message"]["content"]
+        .as_str()
+        .unwrap_or_default()
+        .trim();
+    if !matches!(finish_reason, "" | "stop") || content.is_empty() {
+        return Err("error.modelEmpty".into());
+    }
+    Ok(format!("{content}\n"))
 }
 
 #[cfg(feature = "desktop")]
