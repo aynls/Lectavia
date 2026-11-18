@@ -1157,20 +1157,20 @@ button.generate[aria-disabled="true"] {
   min-inline-size: 0;
 }
 
-.settings-concurrency-controls {
+.settings-row-controls {
   display: flex;
   gap: 0.5rem;
 }
 
-.settings-concurrency-controls input {
+.settings-row-controls input {
   width: 7rem;
 }
 
-.settings-concurrency-controls input[aria-invalid="true"] {
+.settings-row-controls input[aria-invalid="true"] {
   border-color: var(--danger);
 }
 
-#max-concurrency-feedback {
+.settings-row-feedback {
   flex-basis: 100%;
 }
 

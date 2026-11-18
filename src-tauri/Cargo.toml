@@ -22,7 +22,7 @@ crate-type = ["rlib"]
 
 [features]
 default = ["desktop", "mcp"]
-mcp = ["dep:rmcp", "dep:schemars", "dep:uuid", "dep:tokio-util", "dep:dirs", "dep:interprocess", "tokio/time"]
+mcp = ["dep:rmcp", "dep:schemars", "dep:uuid", "dep:tokio-util", "dep:interprocess", "tokio/time"]
 desktop = ["dep:tauri", "dep:tauri-build", "dep:tauri-plugin-dialog", "dep:tauri-plugin-opener", "dep:ashpd", "tokio/time", "dep:axum", "dep:tauri-plugin-clipboard-manager", "dep:widestring", "rmcp?/transport-streamable-http-server"]
 
 [build-dependencies]
@@ -31,7 +31,7 @@ tauri-build = { version = "2", optional = true , features = [] }
 
 [dependencies]
 axum = { version = "0.8", optional = true, default-features = false, features = ["http1", "tokio"] }
-dirs = { version = "7", optional = true }
+dirs = "7"
 interprocess = { version = "2.4", features = ["tokio"], optional = true }
 rmcp = { version = "3.11", optional = true, default-features = false, features = ["server", "macros", "transport-io"] }
 schemars = { version = "1", optional = true }

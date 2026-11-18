@@ -54,6 +54,8 @@ pub fn run() {
             output::open_output,
             output::reveal_output,
             prompt::choose_prompt_file,
+            settings::load_audio_chunk_seconds,
+            settings::save_audio_chunk_seconds,
             settings::load_model_settings,
             settings::save_model_settings,
             #[cfg(feature = "mcp")]
