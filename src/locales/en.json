@@ -1,4 +1,5 @@
 {
+  "mcp.jobMissing": "Unknown job_id in this server process.",
   "mcp.requestId": "Provide a nonempty request_id.",
   "mcp.requestConflict": "This request_id already belongs to a different request.",
   "mcp.asrSettings": "Set up speech recognition in Lectavia’s model settings.",

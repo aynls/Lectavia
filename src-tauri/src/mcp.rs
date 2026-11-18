@@ -42,6 +42,12 @@ struct TranscriptionRequest {
     source: VideoInput,
 }
 
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct JobId {
+    job_id: String,
+}
+
 fn response(result: Result<Value, AppError>) -> CallToolResult {
     match result {
         Ok(value) => CallToolResult::structured(value),
@@ -54,6 +60,12 @@ fn response(result: Result<Value, AppError>) -> CallToolResult {
 
 #[tool_router]
 impl Lectavia {
+    #[tool(
+        description = "Get job status, current phase, and the status, results and errors of each selected part."
+    )]
+    fn get_job(&self, Parameters(input): Parameters<JobId>) -> CallToolResult {
+        response(self.jobs.snapshot(&input.job_id))
+    }
     #[tool(
         description = "Submit raw video transcription. Returns job_id immediately. Poll get_job, then use read_result with each transcript_id."
     )]

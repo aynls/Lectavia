@@ -119,6 +119,50 @@ fn new_id() -> String {
 }
 
 impl Jobs {
+    fn job(&self, id: &str) -> Result<Arc<Job>, AppError> {
+        self.registry
+            .lock()
+            .unwrap()
+            .jobs
+            .get(id)
+            .cloned()
+            .ok_or_else(|| "mcp.jobMissing".into())
+    }
+
+    pub fn snapshot(&self, id: &str) -> Result<Value, AppError> {
+        let job = self.job(id)?;
+        let state = job.state.lock().unwrap();
+        let mut parts = Vec::with_capacity(state.parts.len());
+        let mut statuses = Vec::with_capacity(state.parts.len());
+        for part in &state.parts {
+            let state = part.state.lock().unwrap();
+            statuses.push(state.progress.status);
+            parts.push(json!({
+                "part_id": part.id, "number": part.info.number, "title": part.info.title,
+                "video_title": part.info.video_title, "status": state.progress.status,
+                "phase": state.progress.phase, "error": state.progress.error,
+                "transcript_id": state.transcript_id,
+            }));
+        }
+        let status = if statuses.is_empty() {
+            json!(state.preparation.status)
+        } else if statuses.contains(&Status::Running) {
+            json!(Status::Running)
+        } else if statuses.contains(&Status::Queued) {
+            json!(Status::Queued)
+        } else if statuses.iter().all(|s| *s == Status::Completed) {
+            json!(Status::Completed)
+        } else if statuses.contains(&Status::Completed) {
+            json!("partial")
+        } else {
+            json!(Status::Failed)
+        };
+        Ok(
+            json!({"job_id":id,"status":status,"phase":state.preparation.phase,
+            "error":state.preparation.error, "parts":parts}),
+        )
+    }
+
     pub fn new() -> std::io::Result<Self> {
         Ok(Self {
             registry: Default::default(),
