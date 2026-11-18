@@ -133,8 +133,13 @@ try {
     const soname = platform === "darwin" ? /^[^.]+\.\d+\.dylib$/ : /\.so\.\d+$/;
     mkdirSync(libraries);
     for (const name of readdirSync(libraryDir)) {
-      if (soname.test(name))
-        copyFileSync(join(libraryDir, name), join(libraries, name));
+      if (!soname.test(name)) continue;
+      const library = join(libraries, name);
+      copyFileSync(join(libraryDir, name), library);
+      if (platform === "linux") {
+        // linuxdeploy traces each shared library independently of ffmpeg's RPATH.
+        run("patchelf", ["--set-rpath", "$ORIGIN", library]);
+      }
     }
   }
 
