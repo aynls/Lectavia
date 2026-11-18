@@ -1,4 +1,7 @@
 {
+  "mcp.requestId": "空でない request_id を指定してください。",
+  "mcp.requestConflict": "この request_id は別のリクエストに使用されています。",
+  "mcp.asrSettings": "Lectavia のモデル設定で音声認識を設定してください。",
   "common.cancel": "キャンセル",
   "common.language": "表示言語",
   "common.markdown": "Markdown (.md)",

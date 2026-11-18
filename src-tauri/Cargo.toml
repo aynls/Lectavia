@@ -22,7 +22,7 @@ crate-type = ["rlib"]
 
 [features]
 default = ["desktop", "mcp"]
-mcp = ["dep:rmcp", "dep:schemars"]
+mcp = ["dep:rmcp", "dep:schemars", "dep:uuid"]
 desktop = ["dep:tauri", "dep:tauri-build", "dep:tauri-plugin-dialog", "dep:tauri-plugin-opener", "dep:ashpd", "tokio/time"]
 
 [build-dependencies]
@@ -32,6 +32,7 @@ tauri-build = { version = "2", optional = true , features = [] }
 [dependencies]
 rmcp = { version = "3.11", optional = true, default-features = false, features = ["server", "macros", "transport-io"] }
 schemars = { version = "1", optional = true }
+uuid = { version = "1", features = ["v4", "serde"], optional = true }
 clap = { version = "4", features = ["derive"] }
 tauri = { version = "2", optional = true , features = [] }
 tauri-plugin-dialog = { version = "2", optional = true }

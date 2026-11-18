@@ -1,4 +1,7 @@
 {
+  "mcp.requestId": "Provide a nonempty request_id.",
+  "mcp.requestConflict": "This request_id already belongs to a different request.",
+  "mcp.asrSettings": "Set up speech recognition in Lectavia’s model settings.",
   "common.cancel": "Cancel",
   "common.language": "App language",
   "common.markdown": "Markdown (.md)",

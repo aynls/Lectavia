@@ -26,7 +26,7 @@ use std::os::windows::process::CommandExt;
 #[cfg(feature = "desktop")]
 use std::{collections::HashMap, sync::Mutex};
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum MediaSource {
     Bilibili { url: String },
@@ -194,6 +194,7 @@ async fn process_output(
     #[cfg(windows)]
     command.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
+    command.stdin(std::process::Stdio::null());
     let output = if let Some(cancellation) = cancellation {
         if cancellation.has_changed().is_err() {
             return Err("error.taskCancelled".into());
