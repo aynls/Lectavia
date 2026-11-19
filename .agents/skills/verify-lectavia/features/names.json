@@ -1,0 +1,84 @@
+{
+  "shared": {
+    "settings": { "zh-CN": "设置", "en": "Settings", "ja": "設定" },
+    "back": {
+      "zh-CN": "返回工作台",
+      "en": "Back to workspace",
+      "ja": "ワークスペースに戻る"
+    },
+    "language": { "zh-CN": "界面语言", "en": "App language", "ja": "表示言語" }
+  },
+  "interface-language": {
+    "video-heading": {
+      "zh-CN": "选择视频",
+      "en": "Choose a video",
+      "ja": "動画を選択"
+    }
+  },
+  "video-source": {
+    "link-tab": {
+      "zh-CN": "粘贴链接",
+      "en": "Paste link",
+      "ja": "リンクを貼り付け"
+    },
+    "local-tab": {
+      "zh-CN": "本地文件",
+      "en": "Local file",
+      "ja": "ローカルファイル"
+    },
+    "link-field": {
+      "zh-CN": "Bilibili 或 YouTube 链接",
+      "en": "Bilibili or YouTube link",
+      "ja": "Bilibili または YouTube のリンク"
+    },
+    "pick-file": {
+      "zh-CN": "选择视频文件",
+      "en": "Choose a video file",
+      "ja": "動画ファイルを選択"
+    }
+  },
+  "output-format": {
+    "format": { "zh-CN": "文件格式", "en": "File format", "ja": "ファイル形式" }
+  },
+  "audio-chunk": {
+    "field": {
+      "zh-CN": "转写音频切片时长",
+      "en": "Transcription audio chunk length",
+      "ja": "文字起こし用の音声チャンクの長さ"
+    },
+    "save": { "zh-CN": "保存", "en": "Save", "ja": "保存" },
+    "invalid": {
+      "zh-CN": "请输入大于或等于 60 的整数秒数。",
+      "en": "Enter a whole number of seconds, at least 60.",
+      "ja": "60 以上の整数を秒単位で入力してください。"
+    },
+    "saved": {
+      "zh-CN": "已保存，下次提取音频时生效。",
+      "en": "Saved for the next audio extraction.",
+      "ja": "保存しました。次回の音声抽出から適用されます。"
+    }
+  },
+  "task-queue": {
+    "heading": {
+      "zh-CN": "任务队列",
+      "en": "Task queue",
+      "ja": "タスクキュー"
+    },
+    "empty": {
+      "zh-CN": "还没有任务",
+      "en": "No tasks yet",
+      "ja": "タスクはまだありません"
+    },
+    "generate": {
+      "zh-CN": "生成文稿",
+      "en": "Generate document",
+      "ja": "原稿を作成"
+    },
+    "clear": { "zh-CN": "清空队列", "en": "Clear queue", "ja": "キューを消去" },
+    "missing-video": {
+      "zh-CN": "选择视频",
+      "en": "choose a video",
+      "ja": "動画を選択"
+    }
+  }
+}
