@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import asrPresets from "./asr-providers.json";
 import { message, type Message } from "./i18n";
 
 export interface ModelConnection {
@@ -10,6 +11,13 @@ export interface ModelConnection {
   reasoningEfforts?: string[];
   defaultEffort?: string;
 }
+
+export type AsrProvider = keyof typeof asrPresets | "custom";
+export interface AsrConnection extends ModelConnection {
+  provider?: AsrProvider;
+}
+
+export { asrPresets };
 
 export type ModelPurpose = "asr" | "llm";
 export type ModelConnectionField =
@@ -28,14 +36,12 @@ export interface CatalogModel {
 interface CatalogEntry {
   id?: unknown;
   name?: unknown;
+  active?: boolean;
   reasoning?: { supported_efforts?: unknown; default_effort?: unknown };
 }
 
-export const OPENROUTER_ASR_URL =
-  "https://openrouter.ai/api/v1/audio/transcriptions";
 export const OPENROUTER_LLM_URL =
   "https://openrouter.ai/api/v1/chat/completions";
-export const OPENROUTER_ASR_MODEL = "openai/whisper-large-v3-turbo";
 
 function apiUrlField(value: string): string | Message {
   const input = value.trim();
@@ -85,10 +91,12 @@ export async function listModels(
   catalogUrl: string,
   apiKey: string,
   purpose: ModelPurpose,
+  asrProvider?: AsrProvider,
 ): Promise<CatalogModel[]> {
   const result = await invoke<{ data?: CatalogEntry[] }>("list_models", {
     url: requireValidField(apiUrlField(catalogUrl)),
     apiKey: requireValidField(apiKey.trim() || message("error.apiKey")),
+    asrProvider: asrProvider ?? null,
   });
 
   if (!Array.isArray(result?.data)) {
@@ -96,8 +104,16 @@ export async function listModels(
   }
 
   const models = new Map<string, CatalogModel>();
+  // These two APIs return general model catalogs without an ASR capability field.
+  const generalCatalog = asrProvider === "openai" || asrProvider === "groq";
   for (const model of result.data) {
     const id = typeof model?.id === "string" ? model.id.trim() : "";
+    if (
+      generalCatalog &&
+      (model?.active === false ||
+        !/(whisper|transcrib|transcript|speech[-_]to[-_]text)/i.test(id))
+    )
+      continue;
     if (id) {
       const name = typeof model.name === "string" ? model.name.trim() : "";
       const entry: CatalogModel = { id, name: name || id };

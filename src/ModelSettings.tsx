@@ -1,6 +1,7 @@
 import {
   useId,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useRef,
   useState,
@@ -16,11 +17,12 @@ import {
   type Message,
 } from "./i18n";
 import {
-  OPENROUTER_ASR_MODEL,
-  OPENROUTER_ASR_URL,
   OPENROUTER_LLM_URL,
+  asrPresets,
   listModels,
   validateModelConnection,
+  type AsrConnection,
+  type AsrProvider,
   type CatalogModel,
   type ModelConnection,
   type ModelConnectionErrors,
@@ -29,7 +31,7 @@ import {
 } from "./models";
 
 export interface ModelSettingsValue {
-  asr: ModelConnection;
+  asr: AsrConnection;
   llm: ModelConnection;
 }
 
@@ -74,9 +76,10 @@ function firstInvalidSetting(
 
 const defaultModelSettings: ModelSettingsValue = {
   asr: {
-    baseUrl: OPENROUTER_ASR_URL,
+    provider: "openrouter",
+    baseUrl: asrPresets.openrouter.transcriptionUrl,
     apiKey: "",
-    model: OPENROUTER_ASR_MODEL,
+    model: "",
   },
   llm: { baseUrl: OPENROUTER_LLM_URL, apiKey: "", model: "" },
 };
@@ -84,6 +87,7 @@ const defaultModelSettings: ModelSettingsValue = {
 interface CatalogLookup {
   catalogUrl: string;
   apiKey: string;
+  loading?: boolean;
   models?: CatalogModel[];
   error?: Message;
 }
@@ -142,11 +146,11 @@ function ProviderFields({
   purpose,
   required,
 }: {
-  connection: ModelConnection;
+  connection: AsrConnection;
   errors?: ModelConnectionErrors;
   setConnection: (
-    connection: ModelConnection,
-    changedField?: ModelConnectionField,
+    connection: AsrConnection,
+    changedField?: ModelConnectionField | "provider",
   ) => void;
   onLoadingChange: (purpose: ModelPurpose, loading: boolean) => void;
   purpose: ModelPurpose;
@@ -159,13 +163,11 @@ function ProviderFields({
   currentConnection.current = connection;
   const [lookup, setLookup] = useState<CatalogLookup>();
   const [manualModel, setManualModel] = useState(false);
-  useEffect(
-    () => () => {
-      request.current++;
-    },
-    [],
-  );
-  const catalogUrl = connection.catalogUrl ?? "";
+  const provider =
+    purpose === "asr" ? (connection.provider ?? "custom") : undefined;
+  const preset =
+    provider && provider !== "custom" ? asrPresets[provider] : undefined;
+  const catalogUrl = preset?.catalogUrl ?? connection.catalogUrl ?? "";
   const catalog =
     lookup?.catalogUrl === catalogUrl && lookup.apiKey === connection.apiKey
       ? lookup
@@ -177,7 +179,7 @@ function ProviderFields({
     ? models.find((model) => model.id === modelId)
     : undefined;
   const hasModelName = selectedModel && selectedModel.name !== modelId;
-  const loading = Boolean(catalog && !catalog.error && !catalog.models);
+  const loading = Boolean(catalog?.loading);
   const catalogAction = t(
     loading
       ? "model.fetching"
@@ -185,6 +187,22 @@ function ProviderFields({
         ? "model.select"
         : "model.fetch",
   );
+
+  function changeProvider(next: AsrProvider) {
+    request.current++;
+    onLoadingChange(purpose, false);
+    setLookup(undefined);
+    setManualModel(false);
+    setConnection(
+      {
+        provider: next,
+        baseUrl: next === "custom" ? "" : asrPresets[next].transcriptionUrl,
+        apiKey: "",
+        model: "",
+      },
+      "provider",
+    );
+  }
 
   function editEndpoint(
     field: "baseUrl" | "apiKey" | "catalogUrl",
@@ -233,34 +251,44 @@ function ProviderFields({
   async function fetchModels() {
     const serial = ++request.current;
     const endpoint = { catalogUrl, apiKey: connection.apiKey };
-    setLookup({ ...endpoint });
+    setLookup({ ...endpoint, models: catalog?.models, loading: true });
     onLoadingChange(purpose, true);
     try {
-      const models = await listModels(catalogUrl, endpoint.apiKey, purpose);
+      const models = await listModels(
+        catalogUrl,
+        endpoint.apiKey,
+        purpose,
+        provider,
+      );
       if (serial === request.current) {
         setManualModel(false);
         setLookup({ ...endpoint, models });
-        const current = currentConnection.current;
-        const model = models.find((entry) => entry.id === current.model.trim());
-        const efforts = model?.reasoningEfforts ?? [];
-        setConnection({
-          ...current,
-          reasoningEfforts: model?.reasoningEfforts,
-          defaultEffort: model?.defaultEffort,
-          reasoningEffort: efforts.includes(current.reasoningEffort ?? "")
-            ? current.reasoningEffort
-            : undefined,
-        });
+        if (purpose === "llm") {
+          const current = currentConnection.current;
+          const model = models.find(
+            (entry) => entry.id === current.model.trim(),
+          );
+          const efforts = model?.reasoningEfforts ?? [];
+          setConnection({
+            ...current,
+            reasoningEfforts: model?.reasoningEfforts,
+            defaultEffort: model?.defaultEffort,
+            reasoningEffort: efforts.includes(current.reasoningEffort ?? "")
+              ? current.reasoningEffort
+              : undefined,
+          });
+        }
       }
     } catch (error) {
       if (serial === request.current) {
-        const current = currentConnection.current;
-        setConnection({
-          ...current,
-          reasoningEffort: undefined,
-          reasoningEfforts: undefined,
-          defaultEffort: undefined,
-        });
+        if (purpose === "llm") {
+          setConnection({
+            ...currentConnection.current,
+            reasoningEffort: undefined,
+            reasoningEfforts: undefined,
+            defaultEffort: undefined,
+          });
+        }
         setLookup({
           ...endpoint,
           error: redactMessage(errorMessage(error), [endpoint.apiKey]),
@@ -270,6 +298,17 @@ function ProviderFields({
       if (serial === request.current) onLoadingChange(purpose, false);
     }
   }
+
+  const loadPresetOnOpen = useEffectEvent(() => {
+    if (isTauri() && preset && connection.apiKey.trim()) void fetchModels();
+  });
+  useEffect(() => {
+    const initial = window.setTimeout(() => loadPresetOnOpen(), 0);
+    return () => {
+      window.clearTimeout(initial);
+      request.current++;
+    };
+  }, []);
 
   function inputState(field: ModelConnectionField) {
     return {
@@ -297,22 +336,56 @@ function ProviderFields({
     >
       <h4 id={id + "-purpose"}>{t(`model.purpose.${purpose}`)}</h4>
       <div className="settings-model-endpoint">
-        <div className="settings-model-field">
-          <label htmlFor={id + "-url"}>{t("model.baseUrl")}</label>
-          <input
-            id={id + "-url"}
-            name={id + "-url"}
-            type="url"
-            value={connection.baseUrl}
-            required={required}
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            {...inputState("baseUrl")}
-            onChange={(event) => editEndpoint("baseUrl", event.target.value)}
-          />
-          {renderFieldError("baseUrl")}
-        </div>
+        {provider && (
+          <div className="settings-model-field">
+            <label htmlFor={id + "-provider"}>{t("model.provider")}</label>
+            <select
+              id={id + "-provider"}
+              name={id + "-provider"}
+              value={provider}
+              aria-describedby={preset ? id + "-provider-url" : undefined}
+              onChange={(event) => {
+                const next = event.target.value;
+                if (next === "custom" || Object.hasOwn(asrPresets, next)) {
+                  changeProvider(next as AsrProvider);
+                }
+              }}
+            >
+              {Object.entries(asrPresets).map(([key, entry]) => (
+                <option key={key} value={key}>
+                  {entry.name}
+                </option>
+              ))}
+              <option value="custom">{t("model.customProvider")}</option>
+            </select>
+            {preset && (
+              <p
+                id={id + "-provider-url"}
+                className="muted settings-model-note"
+              >
+                {preset.transcriptionUrl}
+              </p>
+            )}
+          </div>
+        )}
+        {!preset && (
+          <div className="settings-model-field">
+            <label htmlFor={id + "-url"}>{t("model.baseUrl")}</label>
+            <input
+              id={id + "-url"}
+              name={id + "-url"}
+              type="url"
+              value={connection.baseUrl}
+              required={required}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              {...inputState("baseUrl")}
+              onChange={(event) => editEndpoint("baseUrl", event.target.value)}
+            />
+            {renderFieldError("baseUrl")}
+          </div>
+        )}
         <div className="settings-model-field">
           <label htmlFor={id + "-key"}>{t("model.apiKey")}</label>
           <input
@@ -324,24 +397,33 @@ function ProviderFields({
             required={required}
             {...inputState("apiKey")}
             onChange={(event) => editEndpoint("apiKey", event.target.value)}
+            onBlur={() => {
+              if (isTauri() && preset && !catalog && connection.apiKey.trim()) {
+                void fetchModels();
+              }
+            }}
           />
           {renderFieldError("apiKey")}
         </div>
-        <div className="settings-model-field">
-          <label htmlFor={id + "-catalog-url"}>{t("model.catalogUrl")}</label>
-          <input
-            id={id + "-catalog-url"}
-            name={id + "-catalog-url"}
-            type="url"
-            value={catalogUrl}
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            {...inputState("catalogUrl")}
-            onChange={(event) => editEndpoint("catalogUrl", event.target.value)}
-          />
-          {renderFieldError("catalogUrl")}
-        </div>
+        {!preset && (
+          <div className="settings-model-field">
+            <label htmlFor={id + "-catalog-url"}>{t("model.catalogUrl")}</label>
+            <input
+              id={id + "-catalog-url"}
+              name={id + "-catalog-url"}
+              type="url"
+              value={catalogUrl}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              {...inputState("catalogUrl")}
+              onChange={(event) =>
+                editEndpoint("catalogUrl", event.target.value)
+              }
+            />
+            {renderFieldError("catalogUrl")}
+          </div>
+        )}
       </div>
       <div className="settings-model-choices">
         <div className="settings-model-field">
@@ -408,7 +490,9 @@ function ProviderFields({
             <button
               type="button"
               className="settings-model-list"
-              disabled={loading || !catalogUrl.trim()}
+              disabled={
+                loading || !catalogUrl.trim() || !connection.apiKey.trim()
+              }
               onClick={() => {
                 if (manualModel && models.length) {
                   setManualModel(false);
@@ -430,13 +514,20 @@ function ProviderFields({
               className={`settings-model-note ${catalog?.error ? "error" : "muted"}`}
               role="status"
             >
-              {catalog?.error
-                ? renderMessage(t, catalog.error)
-                : catalog?.models &&
-                  (models.length
-                    ? t("model.found", { count: models.length })
-                    : t("model.noModels"))}
+              {loading
+                ? t("model.fetching")
+                : catalog?.error
+                  ? renderMessage(t, catalog.error)
+                  : catalog?.models &&
+                    (models.length
+                      ? t("model.found", { count: models.length })
+                      : t("model.noModels"))}
             </p>
+            {provider === "elevenlabs" && (
+              <p className="muted settings-model-note">
+                {t("model.publicAsrCatalog")}
+              </p>
+            )}
           </div>
         </div>
         {purpose === "llm" && (
@@ -486,10 +577,12 @@ export function ModelSettings({
     if (purpose) {
       return {
         purpose,
-        field: firstInvalidField(errors[purpose]) ?? "baseUrl",
+        field:
+          firstInvalidField(errors[purpose]) ??
+          (purpose === "asr" ? "apiKey" : "baseUrl"),
       };
     }
-    return firstInvalidSetting(errors) ?? { purpose: "asr", field: "baseUrl" };
+    return firstInvalidSetting(errors) ?? { purpose: "asr", field: "apiKey" };
   });
   const [session, setSession] = useState(0);
   const [loadingModels, setLoadingModels] = useState<
@@ -513,7 +606,7 @@ export function ModelSettings({
   function updateDraft(
     purpose: ModelPurpose,
     connection: ModelConnection,
-    changedField?: ModelConnectionField,
+    changedField?: ModelConnectionField | "provider",
   ) {
     setDraft((current) => ({ ...current, [purpose]: connection }));
     if (changedField) {
@@ -521,7 +614,10 @@ export function ModelSettings({
         (current) =>
           current && {
             ...current,
-            [purpose]: { ...current[purpose], [changedField]: undefined },
+            [purpose]:
+              changedField === "provider"
+                ? {}
+                : { ...current[purpose], [changedField]: undefined },
           },
       );
     }

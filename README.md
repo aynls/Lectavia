@@ -69,7 +69,7 @@ Lectavia turns a video into a document in three stages.
 
 ## Get started
 
-1. **Configure your models.** Open **Model settings** and enter the full API URL, API key, and model ID for both transcription and document organization. For OpenRouter, use `https://openrouter.ai/api/v1/audio/transcriptions` and `https://openrouter.ai/api/v1/chat/completions`. To load available models, enter the full model list URL in the optional field. The default transcription preset is OpenRouter's `openai/whisper-large-v3-turbo`.
+1. **Configure your models.** In **Model settings**, choose ElevenLabs, Groq, OpenAI, or OpenRouter for transcription. Enter an API key and select a model from the live catalog. Use **Custom OpenAI-compatible API** to supply your own full transcription URL. For document organization, enter the full API URL, API key, and model ID. Custom transcription and document organization also accept an optional model list URL.
 2. **Load a video.** Paste a Bilibili or YouTube link to load its title and any available parts, or select a local video file.
 3. **Generate a document.** Choose a local folder and an output format (`.md` or `.txt`). Optionally apply an instruction preset or enter additional instructions. Click **Generate document** to follow progress and open the generated files from the queue on the right.
 

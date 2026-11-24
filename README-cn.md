@@ -71,7 +71,7 @@ Lectavia 不只是一个桌面窗口。它的底层任务队列与并发调度�
 
 ## 三步上手
 
-1. **配置模型**：打开顶部「模型设置」，分别填入语音转写（默认预设 OpenRouter `openai/whisper-large-v3-turbo`）与文稿整理的完整 API 地址、`API Key` 及模型 ID。以 OpenRouter 为例，两个地址分别为 `https://openrouter.ai/api/v1/audio/transcriptions` 和 `https://openrouter.ai/api/v1/chat/completions`。如需加载可用模型，在可选字段中填写完整的模型列表地址。
+1. **配置模型**。在「模型设置」中选择 ElevenLabs、Groq、OpenAI 或 OpenRouter，填写 API Key，再从实时列表中选择转写模型。自建或代理服务请选择「自定义 OpenAI 兼容接口」并填写完整转写地址。文稿整理需要填写完整 API 地址、API Key 和模型 ID。自定义转写和文稿整理均可另填模型列表地址。
 2. **载入视频**：粘贴 Bilibili / YouTube 链接（自动解析标题与分 P），或直接选择本地视频文件。
 3. **生成文稿**：选择本地保存目录与输出格式（`.md` / `.txt`），按需选择快捷规范或补充整理要求，点击 **「生成文稿」** 即可在右侧队列实时查看进度并直达文件。
 

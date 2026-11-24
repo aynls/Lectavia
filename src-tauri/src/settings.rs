@@ -98,9 +98,11 @@ pub struct ModelConnection {
 
 impl ModelConnection {
     pub fn is_configured(&self) -> bool {
-        !self.base_url.trim().is_empty()
-            && !self.api_key.trim().is_empty()
-            && !self.model.trim().is_empty()
+        !self.base_url.trim().is_empty() && self.has_credentials()
+    }
+
+    fn has_credentials(&self) -> bool {
+        !self.api_key.trim().is_empty() && !self.model.trim().is_empty()
     }
 
     pub fn selected_reasoning_effort(&self) -> Option<&str> {
@@ -115,9 +117,38 @@ impl ModelConnection {
     }
 }
 
+#[derive(Clone, Copy, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AsrProvider {
+    ElevenLabs,
+    Groq,
+    OpenAi,
+    OpenRouter,
+    #[default]
+    Custom,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct AsrConnection {
+    #[serde(default)]
+    pub provider: AsrProvider,
+    #[serde(flatten)]
+    pub connection: ModelConnection,
+}
+
+impl AsrConnection {
+    pub fn is_configured(&self) -> bool {
+        if self.provider == AsrProvider::Custom {
+            self.connection.is_configured()
+        } else {
+            self.connection.has_credentials()
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 pub struct ModelSettings {
-    pub asr: ModelConnection,
+    pub asr: AsrConnection,
     pub llm: ModelConnection,
 }
 

@@ -1,11 +1,18 @@
 use std::{
+    collections::HashMap,
     path::{Component, Path, PathBuf},
     sync::OnceLock,
 };
 
-use crate::{error::AppError, locale::Locale, output::OutputFormat, settings::ModelConnection};
+use crate::{
+    error::AppError,
+    locale::Locale,
+    output::OutputFormat,
+    settings::{AsrConnection, AsrProvider, ModelConnection},
+};
 use reqwest::{
-    Client, StatusCode, Url,
+    Client, RequestBuilder, Response, StatusCode, Url,
+    header::HeaderValue,
     multipart::{Form, Part},
     redirect::Policy,
 };
@@ -16,6 +23,26 @@ use tokio::fs::{self, File};
 const MAX_AUDIO_BYTES: u64 = 25_000_000;
 
 static CLIENT: OnceLock<Result<Client, reqwest::Error>> = OnceLock::new();
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AsrPreset {
+    transcription_url: String,
+    #[cfg(feature = "desktop")]
+    catalog_url: String,
+}
+
+impl AsrProvider {
+    fn preset(self) -> Option<&'static AsrPreset> {
+        static PRESETS: OnceLock<HashMap<AsrProvider, AsrPreset>> = OnceLock::new();
+        PRESETS
+            .get_or_init(|| {
+                serde_json::from_str(include_str!("../../src/asr-providers.json"))
+                    .expect("valid built-in ASR providers")
+            })
+            .get(&self)
+    }
+}
 
 fn client() -> Result<&'static Client, AppError> {
     CLIENT
@@ -85,17 +112,16 @@ async fn checked_audio(cache: &Path, path: &Path) -> Result<File, AppError> {
     Err("error.audioChunkRestricted".into())
 }
 
-async fn send_json(
-    request: reqwest::RequestBuilder,
-    task: &'static str,
-) -> Result<Value, AppError> {
-    let provider_error =
-        |key: &'static str| AppError::from(key).with("task", json!({ "key": task }));
+fn provider_error(task: &'static str, key: &'static str) -> AppError {
+    AppError::from(key).with("task", json!({ "key": task }))
+}
+
+async fn send_request(request: RequestBuilder, task: &'static str) -> Result<Response, AppError> {
     let response = request.send().await.map_err(|error| {
         if error.is_timeout() {
-            provider_error("error.providerTimeout")
+            provider_error(task, "error.providerTimeout")
         } else {
-            provider_error("error.providerConnect")
+            provider_error(task, "error.providerConnect")
         }
     })?;
     let status = response.status();
@@ -111,45 +137,102 @@ async fn send_json(
             _ if status.is_server_error() => "error.httpServer",
             _ => "error.httpOther",
         };
-        return Err(provider_error("error.providerHttp")
+        return Err(provider_error(task, "error.providerHttp")
             .with("status", status.as_u16())
             .with("reason", json!({ "key": reason })));
     }
-    response.json().await.map_err(|error| {
-        if error.is_timeout() {
-            provider_error("error.providerResponseTimeout")
-        } else if error.is_decode() {
-            provider_error("error.providerJson")
-        } else {
-            provider_error("error.providerResponse")
-        }
-    })
+    Ok(response)
+}
+
+fn response_error(task: &'static str, error: reqwest::Error) -> AppError {
+    let key = if error.is_timeout() {
+        "error.providerResponseTimeout"
+    } else if error.is_decode() {
+        "error.providerJson"
+    } else {
+        "error.providerResponse"
+    };
+    provider_error(task, key)
+}
+
+async fn send_json(request: RequestBuilder, task: &'static str) -> Result<Value, AppError> {
+    send_request(request, task)
+        .await?
+        .json()
+        .await
+        .map_err(|error| response_error(task, error))
 }
 
 #[cfg(feature = "desktop")]
 #[tauri::command]
-pub async fn list_models(url: String, api_key: String) -> Result<Value, AppError> {
-    let url = endpoint_url(&url)?;
+pub async fn list_models(
+    url: String,
+    api_key: String,
+    asr_provider: Option<AsrProvider>,
+) -> Result<Value, AppError> {
+    let preset = asr_provider.and_then(AsrProvider::preset);
+    let url = endpoint_url(preset.map_or(&url, |preset| &preset.catalog_url))?;
     let api_key = api_key.trim();
     if api_key.is_empty() {
         return Err("error.apiKey".into());
     }
-    send_json(
-        client()?
-            .get(url)
-            .timeout(std::time::Duration::from_secs(30))
-            .bearer_auth(api_key),
-        "model.providerCatalog",
-    )
-    .await
+    let task = "model.providerCatalog";
+    let request = client()?
+        .get(url)
+        .timeout(std::time::Duration::from_secs(30));
+    if asr_provider == Some(AsrProvider::ElevenLabs) {
+        // The published batch-ASR catalog is public and does not take credentials.
+        let markdown = send_request(request, task)
+            .await?
+            .text()
+            .await
+            .map_err(|error| response_error(task, error))?;
+        return elevenlabs_catalog(&markdown);
+    }
+    send_json(request.bearer_auth(api_key), task).await
+}
+
+#[cfg(feature = "desktop")]
+fn elevenlabs_catalog(markdown: &str) -> Result<Value, AppError> {
+    let models: Vec<_> = markdown
+        .lines()
+        .skip_while(|line| line.trim() != "## Models overview")
+        .skip(1)
+        .take_while(|line| {
+            !line.trim_start().starts_with("## ") && !line.trim_start().starts_with("### ")
+        })
+        .filter_map(|line| {
+            let mut cells = line.trim().strip_prefix('|')?.split('|').map(str::trim);
+            let id = cells.next()?.strip_prefix('`')?.strip_suffix('`')?;
+            let description = cells.next()?.to_ascii_lowercase();
+            let languages = cells.next()?;
+            if languages.contains("/capabilities/speech-to-text")
+                && !description.contains("real-time")
+                && !description.contains("realtime")
+            {
+                Some(json!({"id": id}))
+            } else {
+                None
+            }
+        })
+        .collect();
+    if models.is_empty() {
+        return Err("error.catalogFormat".into());
+    }
+    Ok(json!({"data": models}))
 }
 
 async fn transcribe_audio_chunk(
     cache: &Path,
-    connection: &ModelConnection,
+    asr: &AsrConnection,
     path: &Path,
 ) -> Result<String, AppError> {
-    let url = endpoint_url(&connection.base_url)?;
+    let connection = &asr.connection;
+    let url = endpoint_url(
+        asr.provider
+            .preset()
+            .map_or(&connection.base_url, |preset| &preset.transcription_url),
+    )?;
     let (api_key, model) = credentials(&connection.api_key, &connection.model)?;
     let audio = checked_audio(cache, path).await?;
     let metadata = audio
@@ -168,14 +251,18 @@ async fn transcribe_audio_chunk(
         .file_name("chunk.mp3")
         .mime_str("audio/mpeg")
         .map_err(|_| "error.audioRequest")?;
+    let request = client()?.post(url);
+    let (request, model_field) = if asr.provider == AsrProvider::ElevenLabs {
+        let mut key = HeaderValue::from_str(api_key).map_err(|_| "error.apiKey")?;
+        key.set_sensitive(true);
+        (request.header("xi-api-key", key), "model_id")
+    } else {
+        (request.bearer_auth(api_key), "model")
+    };
     let form = Form::new()
-        .text("model", model.to_owned())
+        .text(model_field, model.to_owned())
         .part("file", part);
-    let result = send_json(
-        client()?.post(url).bearer_auth(api_key).multipart(form),
-        "model.purpose.asr",
-    )
-    .await?;
+    let result = send_json(request.multipart(form), "model.purpose.asr").await?;
     result["text"]
         .as_str()
         .map(|text| text.trim().to_owned())
@@ -185,7 +272,7 @@ async fn transcribe_audio_chunk(
 pub async fn transcribe(
     cache: &Path,
     files: &[PathBuf],
-    connection: &ModelConnection,
+    connection: &AsrConnection,
 ) -> Result<String, AppError> {
     let mut transcript = Vec::new();
     for (index, path) in files.iter().enumerate() {

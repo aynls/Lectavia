@@ -1,0 +1,22 @@
+{
+  "elevenlabs": {
+    "name": "ElevenLabs",
+    "transcriptionUrl": "https://api.elevenlabs.io/v1/speech-to-text",
+    "catalogUrl": "https://elevenlabs.io/docs/overview/models.md"
+  },
+  "groq": {
+    "name": "Groq",
+    "transcriptionUrl": "https://api.groq.com/openai/v1/audio/transcriptions",
+    "catalogUrl": "https://api.groq.com/openai/v1/models"
+  },
+  "openai": {
+    "name": "OpenAI",
+    "transcriptionUrl": "https://api.openai.com/v1/audio/transcriptions",
+    "catalogUrl": "https://api.openai.com/v1/models"
+  },
+  "openrouter": {
+    "name": "OpenRouter",
+    "transcriptionUrl": "https://openrouter.ai/api/v1/audio/transcriptions",
+    "catalogUrl": "https://openrouter.ai/api/v1/models?output_modalities=transcription"
+  }
+}
