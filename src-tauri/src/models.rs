@@ -20,12 +20,7 @@ static CLIENT: OnceLock<Result<Client, reqwest::Error>> = OnceLock::new();
 
 fn client() -> Result<&'static Client, AppError> {
     CLIENT
-        .get_or_init(|| {
-            Client::builder()
-                .connect_timeout(Duration::from_secs(15))
-                .redirect(Policy::none())
-                .build()
-        })
+        .get_or_init(|| Client::builder().redirect(Policy::none()).build())
         .as_ref()
         .map_err(|_| "error.modelNetworkInit".into())
 }
@@ -196,11 +191,7 @@ async fn transcribe_audio_chunk(
         .text("model", model.to_owned())
         .part("file", part);
     let result = send_json(
-        client()?
-            .post(url)
-            .timeout(Duration::from_secs(90))
-            .bearer_auth(api_key)
-            .multipart(form),
+        client()?.post(url).bearer_auth(api_key).multipart(form),
         "model.purpose.asr",
     )
     .await?;
@@ -267,11 +258,7 @@ async fn complete_text(
         reasoning_effort: connection.selected_reasoning_effort(),
     };
     send_json(
-        client()?
-            .post(url)
-            .timeout(Duration::from_secs(180))
-            .bearer_auth(api_key)
-            .json(&body),
+        client()?.post(url).bearer_auth(api_key).json(&body),
         "model.purpose.llm",
     )
     .await
