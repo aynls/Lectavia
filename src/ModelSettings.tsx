@@ -523,11 +523,6 @@ function ProviderFields({
                       ? t("model.found", { count: models.length })
                       : t("model.noModels"))}
             </p>
-            {provider === "elevenlabs" && (
-              <p className="muted settings-model-note">
-                {t("model.publicAsrCatalog")}
-              </p>
-            )}
           </div>
         </div>
         {purpose === "llm" && (

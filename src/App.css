@@ -1101,6 +1101,7 @@ button.generate[aria-disabled="true"] {
 .settings-page {
   --settings-control-height: 3.125rem;
   overflow-y: auto;
+  padding-inline: clamp(1rem, 3vw, 3.25rem);
   font-size: 1.125rem;
 }
 

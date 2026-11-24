@@ -186,7 +186,6 @@
   "model.baseUrl": "完整 API 地址",
   "model.provider": "转写供应商",
   "model.customProvider": "自定义 OpenAI 兼容接口",
-  "model.publicAsrCatalog": "模型列表来自 ElevenLabs 官方公开目录，实际可用模型取决于 API Key 的权限。",
   "model.catalogUrl": "模型列表地址（可选）",
   "model.apiKey": "API Key",
   "model.select": "从列表选择模型",

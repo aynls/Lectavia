@@ -78,7 +78,7 @@ export function SettingsPage({
   }
 
   return (
-    <main className="app-width app-main settings-page">
+    <main className="app-main settings-page">
       <div className="settings-page-content">
         <h2 tabIndex={-1} ref={focusTitle ? focusHeading : undefined}>
           {t("settings.title")}
