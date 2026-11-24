@@ -17,7 +17,8 @@ import {
 } from "./i18n";
 import {
   OPENROUTER_ASR_MODEL,
-  OPENROUTER_BASE_URL,
+  OPENROUTER_ASR_URL,
+  OPENROUTER_LLM_URL,
   listModels,
   validateModelConnection,
   type CatalogModel,
@@ -39,7 +40,7 @@ interface ModelSettingsFocus {
 
 type SettingsErrors = Record<ModelPurpose, ModelConnectionErrors>;
 
-const connectionFields = ["baseUrl", "apiKey", "model"] as const;
+const connectionFields = ["baseUrl", "apiKey", "catalogUrl", "model"] as const;
 const modelPurposes = ["asr", "llm"] as const;
 
 function firstInvalidField(errors: ModelConnectionErrors) {
@@ -73,15 +74,15 @@ function firstInvalidSetting(
 
 const defaultModelSettings: ModelSettingsValue = {
   asr: {
-    baseUrl: OPENROUTER_BASE_URL,
+    baseUrl: OPENROUTER_ASR_URL,
     apiKey: "",
     model: OPENROUTER_ASR_MODEL,
   },
-  llm: { baseUrl: OPENROUTER_BASE_URL, apiKey: "", model: "" },
+  llm: { baseUrl: OPENROUTER_LLM_URL, apiKey: "", model: "" },
 };
 
 interface CatalogLookup {
-  baseUrl: string;
+  catalogUrl: string;
   apiKey: string;
   models?: CatalogModel[];
   error?: Message;
@@ -164,9 +165,9 @@ function ProviderFields({
     },
     [],
   );
+  const catalogUrl = connection.catalogUrl ?? "";
   const catalog =
-    lookup?.baseUrl === connection.baseUrl &&
-    lookup.apiKey === connection.apiKey
+    lookup?.catalogUrl === catalogUrl && lookup.apiKey === connection.apiKey
       ? lookup
       : undefined;
   const models = catalog?.models ?? [];
@@ -185,11 +186,12 @@ function ProviderFields({
         : "model.fetch",
   );
 
-  function editEndpoint(field: "baseUrl" | "apiKey", value: string) {
+  function editEndpoint(
+    field: "baseUrl" | "apiKey" | "catalogUrl",
+    value: string,
+  ) {
     const providerChanged =
-      field === "baseUrl" &&
-      value.trim().replace(/\/+$/, "") !==
-        connection.baseUrl.trim().replace(/\/+$/, "");
+      field !== "apiKey" && value.trim() !== (connection[field] ?? "").trim();
     request.current++;
     onLoadingChange(purpose, false);
     setLookup(undefined);
@@ -230,11 +232,11 @@ function ProviderFields({
 
   async function fetchModels() {
     const serial = ++request.current;
-    const endpoint = { baseUrl: connection.baseUrl, apiKey: connection.apiKey };
+    const endpoint = { catalogUrl, apiKey: connection.apiKey };
     setLookup({ ...endpoint });
     onLoadingChange(purpose, true);
     try {
-      const models = await listModels(endpoint, purpose);
+      const models = await listModels(catalogUrl, endpoint.apiKey, purpose);
       if (serial === request.current) {
         setManualModel(false);
         setLookup({ ...endpoint, models });
@@ -325,6 +327,21 @@ function ProviderFields({
           />
           {renderFieldError("apiKey")}
         </div>
+        <div className="settings-model-field">
+          <label htmlFor={id + "-catalog-url"}>{t("model.catalogUrl")}</label>
+          <input
+            id={id + "-catalog-url"}
+            name={id + "-catalog-url"}
+            type="url"
+            value={catalogUrl}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            {...inputState("catalogUrl")}
+            onChange={(event) => editEndpoint("catalogUrl", event.target.value)}
+          />
+          {renderFieldError("catalogUrl")}
+        </div>
       </div>
       <div className="settings-model-choices">
         <div className="settings-model-field">
@@ -391,7 +408,7 @@ function ProviderFields({
             <button
               type="button"
               className="settings-model-list"
-              disabled={loading}
+              disabled={loading || !catalogUrl.trim()}
               onClick={() => {
                 if (manualModel && models.length) {
                   setManualModel(false);

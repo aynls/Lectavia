@@ -88,7 +88,6 @@ const modelSettingErrors = new Set<MessageKey>([
   "mcp.llmSettings",
   "error.loadModelSettings",
   "error.baseUrl",
-  "error.baseUrlHasRoute",
   "error.credentials",
   "error.apiKey",
   "error.modelId",

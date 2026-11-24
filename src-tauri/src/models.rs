@@ -1,7 +1,6 @@
 use std::{
     path::{Component, Path, PathBuf},
     sync::OnceLock,
-    time::Duration,
 };
 
 use crate::{error::AppError, locale::Locale, output::OutputFormat, settings::ModelConnection};
@@ -25,28 +24,18 @@ fn client() -> Result<&'static Client, AppError> {
         .map_err(|_| "error.modelNetworkInit".into())
 }
 
-fn endpoint(base_url: &str, route: &str) -> Result<Url, AppError> {
-    let mut url = Url::parse(base_url.trim()).map_err(|_| "error.baseUrl")?;
+fn endpoint_url(value: &str) -> Result<Url, AppError> {
+    let url = Url::parse(value.trim()).map_err(|_| "error.baseUrl")?;
     let is_local = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
     if !(url.scheme() == "https" || (url.scheme() == "http" && is_local))
         || url.host_str().is_none()
         || !url.username().is_empty()
         || url.password().is_some()
-        || url.query().is_some()
         || url.fragment().is_some()
     {
         return Err("error.baseUrl".into());
     }
 
-    let path = url.path().trim_end_matches('/');
-    if ["/models", "/audio/transcriptions", "/chat/completions"]
-        .iter()
-        .any(|route| path.ends_with(route))
-    {
-        return Err("error.baseUrlHasRoute".into());
-    }
-
-    url.set_path(&format!("{path}/{route}"));
     Ok(url)
 }
 
@@ -139,16 +128,8 @@ async fn send_json(
 
 #[cfg(feature = "desktop")]
 #[tauri::command]
-pub async fn list_models(
-    base_url: String,
-    api_key: String,
-    transcription: bool,
-) -> Result<Value, AppError> {
-    let mut url = endpoint(&base_url, "models")?;
-    if transcription {
-        url.query_pairs_mut()
-            .append_pair("output_modalities", "transcription");
-    }
+pub async fn list_models(url: String, api_key: String) -> Result<Value, AppError> {
+    let url = endpoint_url(&url)?;
     let api_key = api_key.trim();
     if api_key.is_empty() {
         return Err("error.apiKey".into());
@@ -156,7 +137,7 @@ pub async fn list_models(
     send_json(
         client()?
             .get(url)
-            .timeout(Duration::from_secs(30))
+            .timeout(std::time::Duration::from_secs(30))
             .bearer_auth(api_key),
         "model.providerCatalog",
     )
@@ -168,7 +149,7 @@ async fn transcribe_audio_chunk(
     connection: &ModelConnection,
     path: &Path,
 ) -> Result<String, AppError> {
-    let url = endpoint(&connection.base_url, "audio/transcriptions")?;
+    let url = endpoint_url(&connection.base_url)?;
     let (api_key, model) = credentials(&connection.api_key, &connection.model)?;
     let audio = checked_audio(cache, path).await?;
     let metadata = audio
@@ -250,7 +231,7 @@ async fn complete_text(
     connection: &ModelConnection,
     messages: Vec<ChatMessage>,
 ) -> Result<Value, AppError> {
-    let url = endpoint(&connection.base_url, "chat/completions")?;
+    let url = endpoint_url(&connection.base_url)?;
     let (api_key, model) = credentials(&connection.api_key, &connection.model)?;
     let body = ChatRequest {
         model,

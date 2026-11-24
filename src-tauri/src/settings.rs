@@ -87,6 +87,8 @@ pub struct ModelConnection {
     pub api_key: String,
     pub model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    catalog_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_efforts: Option<Vec<String>>,

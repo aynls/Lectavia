@@ -1,20 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
 import { message, type Message } from "./i18n";
 
-interface ModelEndpoint {
+export interface ModelConnection {
   baseUrl: string;
   apiKey: string;
-}
-
-export interface ModelConnection extends ModelEndpoint {
   model: string;
+  catalogUrl?: string;
   reasoningEffort?: string;
   reasoningEfforts?: string[];
   defaultEffort?: string;
 }
 
 export type ModelPurpose = "asr" | "llm";
-export type ModelConnectionField = keyof ModelEndpoint | "model";
+export type ModelConnectionField =
+  "baseUrl" | "apiKey" | "model" | "catalogUrl";
 export type ModelConnectionErrors = Partial<
   Record<ModelConnectionField, Message>
 >;
@@ -32,43 +31,29 @@ interface CatalogEntry {
   reasoning?: { supported_efforts?: unknown; default_effort?: unknown };
 }
 
-export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+export const OPENROUTER_ASR_URL =
+  "https://openrouter.ai/api/v1/audio/transcriptions";
+export const OPENROUTER_LLM_URL =
+  "https://openrouter.ai/api/v1/chat/completions";
 export const OPENROUTER_ASR_MODEL = "openai/whisper-large-v3-turbo";
 
-function baseUrlField(value: string): string | Message {
-  const baseUrl = URL.parse(value.trim());
+function apiUrlField(value: string): string | Message {
+  const input = value.trim();
+  const url = URL.parse(input);
   const isLocal =
-    baseUrl && ["localhost", "127.0.0.1", "[::1]"].includes(baseUrl.hostname);
+    url && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
 
   if (
-    !baseUrl ||
-    (baseUrl.protocol !== "https:" &&
-      !(baseUrl.protocol === "http:" && isLocal)) ||
-    baseUrl.username ||
-    baseUrl.password ||
-    baseUrl.search ||
-    baseUrl.hash
+    !url ||
+    (url.protocol !== "https:" && !(url.protocol === "http:" && isLocal)) ||
+    url.username ||
+    url.password ||
+    url.hash
   ) {
     return message("error.baseUrl");
   }
 
-  const path = baseUrl.pathname.replace(/\/+$/, "");
-  if (
-    ["/models", "/audio/transcriptions", "/chat/completions"].some((route) =>
-      path.endsWith(route),
-    )
-  ) {
-    return message("error.baseUrlHasRoute");
-  }
-
-  return baseUrl.href.replace(/\/+$/, "");
-}
-
-function endpointFields(connection: ModelEndpoint) {
-  return {
-    baseUrl: baseUrlField(connection.baseUrl),
-    apiKey: connection.apiKey.trim() || message("error.apiKey"),
-  };
+  return input;
 }
 
 function modelField(value: string): string | Message {
@@ -80,37 +65,30 @@ function requireValidField(value: string | Message): string {
   return value;
 }
 
-function normalizeEndpoint(connection: ModelEndpoint): ModelEndpoint {
-  const { baseUrl, apiKey } = endpointFields(connection);
-  return {
-    baseUrl: requireValidField(baseUrl),
-    apiKey: requireValidField(apiKey),
-  };
-}
-
 export function validateModelConnection(
   connection: ModelConnection,
 ): ModelConnectionErrors {
-  const { baseUrl, apiKey } = endpointFields(connection);
+  const baseUrl = apiUrlField(connection.baseUrl);
+  const catalogUrl = connection.catalogUrl?.trim()
+    ? apiUrlField(connection.catalogUrl)
+    : "";
   const model = modelField(connection.model);
   return {
     baseUrl: typeof baseUrl === "string" ? undefined : baseUrl,
-    apiKey: typeof apiKey === "string" ? undefined : apiKey,
+    apiKey: connection.apiKey.trim() ? undefined : message("error.apiKey"),
     model: typeof model === "string" ? undefined : model,
+    catalogUrl: typeof catalogUrl === "string" ? undefined : catalogUrl,
   };
 }
 
 export async function listModels(
-  connection: ModelEndpoint,
+  catalogUrl: string,
+  apiKey: string,
   purpose: ModelPurpose,
 ): Promise<CatalogModel[]> {
-  const profile = normalizeEndpoint(connection);
-  const host = new URL(profile.baseUrl).hostname;
-  const transcription =
-    purpose === "asr" && ["openrouter.ai", "eu.openrouter.ai"].includes(host);
   const result = await invoke<{ data?: CatalogEntry[] }>("list_models", {
-    ...profile,
-    transcription,
+    url: requireValidField(apiUrlField(catalogUrl)),
+    apiKey: requireValidField(apiKey.trim() || message("error.apiKey")),
   });
 
   if (!Array.isArray(result?.data)) {
